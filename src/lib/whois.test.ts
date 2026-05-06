@@ -49,7 +49,7 @@ describe("whois", () => {
 			},
 			{
 				id: "dm_match",
-				text: "I am one of the Blacksmith cofounders, try the testboxes",
+				text: "I am one of the Blacksmith cofounders, try the testboxes https://t.co/demo",
 				createdAt: "2026-05-01T00:01:00.000Z",
 				sender: "profile_user_42",
 				direction: "inbound",
@@ -73,7 +73,52 @@ describe("whois", () => {
 				message.text,
 			);
 		}
+		db.prepare(
+			`
+      insert into tweets (
+        id, account_id, author_profile_id, kind, text, created_at,
+        is_replied, reply_to_id, like_count, media_count, bookmarked, liked,
+        entities_json, media_json, quoted_tweet_id
+      ) values ('tweet_blacksmith', 'acct_primary', 'profile_user_42', 'home', 'Blacksmith public tweet', '2026-05-01T00:02:00.000Z', 0, null, 0, 0, 0, 0, '{}', '[]', null)
+      `,
+		).run();
+		db.prepare("insert into tweets_fts (tweet_id, text) values (?, ?)").run(
+			"tweet_blacksmith",
+			"Blacksmith public tweet",
+		);
+		db.prepare(
+			"insert into sync_cache (cache_key, value_json, updated_at) values (?, ?, ?)",
+		).run(
+			"url:expand:https://t.co/demo",
+			JSON.stringify({
+				expandedUrl: "https://www.blacksmith.sh/",
+				finalUrl: "https://www.blacksmith.sh/",
+				status: "hit",
+			}),
+			"2026-05-01T00:00:00.000Z",
+		);
 	});
+
+	function insertLowConfidenceConversation() {
+		const db = getNativeDb();
+		db.prepare(
+			"insert into profiles (id, handle, display_name, bio, followers_count, avatar_hue, created_at) values ('profile_user_99', 'id99', 'id99', '', 0, 99, '2020-01-01T00:00:00.000Z')",
+		).run();
+		db.prepare(
+			"insert into dm_conversations (id, account_id, participant_profile_id, title, last_message_at, unread_count, needs_reply) values ('dm_low', 'acct_primary', 'profile_user_99', 'id99', '2026-04-01T00:00:00.000Z', 0, 1)",
+		).run();
+		db.prepare(
+			`
+      insert into dm_messages (
+        id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
+      ) values ('dm_low_match', 'dm_low', 'profile_user_99', 'blacksmith', '2026-04-01T00:00:00.000Z', 'inbound', 0, 0)
+      `,
+		).run();
+		db.prepare("insert into dm_fts (message_id, text) values (?, ?)").run(
+			"dm_low_match",
+			"blacksmith",
+		);
+	}
 
 	afterEach(() => {
 		resetDatabaseForTests();
@@ -83,6 +128,7 @@ describe("whois", () => {
 	});
 
 	it("clusters DM evidence into ranked identity candidates", async () => {
+		insertLowConfidenceConversation();
 		const { runWhois } = await import("./whois");
 
 		const result = await runWhois("blacksmith", {
@@ -110,5 +156,77 @@ describe("whois", () => {
 			],
 		});
 		expect(result.candidates[0]?.confidence).toBeGreaterThanOrEqual(80);
+		expect(result.candidates[1]).toMatchObject({
+			confidence: expect.any(Number),
+			reasons: ["message text matches query"],
+			conversation: expect.objectContaining({ id: "dm_low" }),
+		});
+	});
+
+	it("resolves local profiles by default without xurl fallback", async () => {
+		const { runWhois } = await import("./whois");
+
+		const result = await runWhois("blacksmith", {
+			xurlFallback: false,
+			expandUrls: false,
+			context: 1,
+		});
+
+		expect(result.profileResolution).toEqual([
+			expect.objectContaining({
+				profileId: "profile_user_42",
+				status: "hit",
+				source: "local",
+			}),
+		]);
+	});
+
+	it("attaches cached URL expansions and formats identity reports", async () => {
+		const { formatWhois, runWhois } = await import("./whois");
+
+		const result = await runWhois("blacksmith", {
+			resolveProfiles: false,
+			context: 1,
+		});
+
+		expect(result.urlExpansions).toEqual([
+			expect.objectContaining({
+				url: "https://t.co/demo",
+				finalUrl: "https://www.blacksmith.sh/",
+				source: "cache",
+				status: "hit",
+			}),
+		]);
+		expect(result.candidates[0]?.reasons).toContain(
+			"expanded URL matches query",
+		);
+		expect(result.candidates[0]?.evidence[0]?.urlExpansions).toEqual([
+			expect.objectContaining({ finalUrl: "https://www.blacksmith.sh/" }),
+		]);
+		expect(formatWhois(result)).toContain(
+			"https://t.co/demo -> https://www.blacksmith.sh/",
+		);
+	});
+
+	it("can search only related tweets and formats empty DM candidates", async () => {
+		const { formatWhois, runWhois } = await import("./whois");
+
+		const result = await runWhois("blacksmith", {
+			dms: false,
+			tweets: true,
+			resolveProfiles: false,
+			expandUrls: false,
+			limit: 2,
+		});
+
+		expect(result.candidates).toEqual([]);
+		expect(result.relatedTweets).toEqual([
+			expect.objectContaining({
+				id: "tweet_blacksmith",
+				text: "Blacksmith public tweet",
+			}),
+		]);
+		expect(formatWhois(result)).toContain("No matching DM candidates.");
+		expect(formatWhois(result)).toContain("Related tweets: 1");
 	});
 });

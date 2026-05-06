@@ -121,4 +121,85 @@ describe("profile resolver", () => {
 		expect(mocks.lookupProfileViaBird).toHaveBeenCalledTimes(1);
 		expect(mocks.lookupUsersByIds).toHaveBeenCalledTimes(1);
 	});
+
+	it("returns local non-placeholder profiles without live lookup", async () => {
+		const db = getNativeDb();
+		db.prepare(
+			"update profiles set handle = 'sam', display_name = 'Sam Altman', bio = 'Working on AGI', followers_count = 123 where id = 'profile_user_42'",
+		).run();
+		const { resolveProfilesForIds } = await import("./profile-resolver");
+
+		await expect(
+			resolveProfilesForIds(["profile_user_42", "profile_me"]),
+		).resolves.toEqual([
+			expect.objectContaining({
+				status: "hit",
+				source: "local",
+				profile: expect.objectContaining({ handle: "sam" }),
+			}),
+			expect.objectContaining({
+				profileId: "profile_me",
+				externalUserId: null,
+				status: "miss",
+				source: "local",
+			}),
+		]);
+		expect(mocks.lookupProfileViaBird).not.toHaveBeenCalled();
+		expect(mocks.lookupUsersByIds).not.toHaveBeenCalled();
+	});
+
+	it("can skip xurl fallback and can use xurl after a bird miss", async () => {
+		mocks.lookupProfileViaBird.mockRejectedValueOnce(new Error("bird down"));
+		const { resolveProfilesForIds } = await import("./profile-resolver");
+
+		await expect(
+			resolveProfilesForIds(["profile_user_42"], { xurlFallback: false }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				status: "error",
+				source: "bird",
+				error: "bird down",
+			}),
+		]);
+		expect(mocks.lookupUsersByIds).not.toHaveBeenCalled();
+
+		mocks.lookupProfileViaBird.mockResolvedValueOnce(null);
+		mocks.lookupUsersByIds.mockResolvedValueOnce([
+			{
+				id: "42",
+				username: "sam",
+				name: "Sam Altman",
+				description: "Working on AGI",
+				public_metrics: { followers_count: 123, following_count: 45 },
+			},
+		]);
+		await expect(
+			resolveProfilesForIds(["profile_user_42"], { refresh: true }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				status: "hit",
+				source: "xurl",
+				profile: expect.objectContaining({ handle: "sam" }),
+			}),
+		]);
+		expect(mocks.lookupUsersByIds).toHaveBeenCalledWith(["42"]);
+	});
+
+	it("summarizes placeholder hydration batches", async () => {
+		mocks.lookupProfileViaBird.mockResolvedValueOnce({
+			id: "42",
+			username: "sam",
+			name: "Sam Altman",
+			public_metrics: { followers_count: 123, following_count: 45 },
+		});
+		const { resolvePlaceholderProfiles } = await import("./profile-resolver");
+
+		await expect(resolvePlaceholderProfiles({ limit: 10 })).resolves.toEqual(
+			expect.objectContaining({
+				ok: true,
+				requestedProfiles: 1,
+				hydratedProfiles: 1,
+			}),
+		);
+	});
 });

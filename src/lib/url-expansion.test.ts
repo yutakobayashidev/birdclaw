@@ -60,4 +60,68 @@ describe("URL expansion cache", () => {
 		]);
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 	});
+
+	it("falls back from HEAD to GET and caches misses", async () => {
+		const fetchImpl = vi
+			.fn()
+			.mockResolvedValueOnce({
+				ok: false,
+				status: 500,
+				url: "https://t.co/bad",
+			})
+			.mockResolvedValueOnce({
+				ok: false,
+				status: 404,
+				url: "https://t.co/bad",
+			});
+		const { expandUrls } = await import("./url-expansion");
+
+		await expect(
+			expandUrls(["https://t.co/bad"], { fetchImpl }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				url: "https://t.co/bad",
+				finalUrl: "https://t.co/bad",
+				status: "miss",
+				error: "HTTP 404",
+				source: "network",
+			}),
+		]);
+		await expect(
+			expandUrls(["https://t.co/bad"], { fetchImpl }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				status: "miss",
+				error: "HTTP 404",
+				source: "cache",
+			}),
+		]);
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+	});
+
+	it("caches network expansion errors", async () => {
+		const fetchImpl = vi.fn().mockRejectedValue("network down");
+		const { expandUrls } = await import("./url-expansion");
+
+		await expect(
+			expandUrls(["https://t.co/error"], { fetchImpl }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				url: "https://t.co/error",
+				status: "error",
+				error: "network down",
+				source: "network",
+			}),
+		]);
+		await expect(
+			expandUrls(["https://t.co/error"], { fetchImpl }),
+		).resolves.toEqual([
+			expect.objectContaining({
+				status: "error",
+				error: "network down",
+				source: "cache",
+			}),
+		]);
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+	});
 });
