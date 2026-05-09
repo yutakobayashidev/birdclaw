@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-05-09
+
 ### Added
 
 - Preserve richer X profile metadata during `bird`/`xurl` profile hydration, including profile URLs, profile URL entities, locations, verification type, raw profile JSON, and X affiliation/highlighted-label metadata.
