@@ -63,21 +63,22 @@ function upsertMentionEdge(
 	id: string,
 	raw: Record<string, unknown>,
 	seenAt = "2026-05-12T10:00:00.000Z",
+	source = "xurl",
 ) {
 	getNativeDb()
 		.prepare(
 			`
     insert into tweet_account_edges (
-      account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
-      source, raw_json, updated_at
-    ) values ('acct_primary', ?, 'mention', ?, ?, 1, 'xurl', ?, ?)
-    on conflict(account_id, tweet_id, kind) do update set
-      raw_json = excluded.raw_json,
-      last_seen_at = excluded.last_seen_at,
-      updated_at = excluded.updated_at
-    `,
+	      account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
+	      source, raw_json, updated_at
+	    ) values ('acct_primary', ?, 'mention', ?, ?, 1, ?, ?, ?)
+	    on conflict(account_id, tweet_id, kind) do update set
+	      raw_json = excluded.raw_json,
+	      last_seen_at = excluded.last_seen_at,
+	      updated_at = excluded.updated_at
+	    `,
 		)
-		.run(id, seenAt, seenAt, JSON.stringify(raw), seenAt);
+		.run(id, seenAt, seenAt, source, JSON.stringify(raw), seenAt);
 }
 
 afterEach(() => {
@@ -355,6 +356,102 @@ describe("mention thread sync", () => {
 		expect(edgeCount.count).toBe(2);
 	});
 
+	it("walks parents when xurl search results omit ancestors", async () => {
+		setupTempHome();
+		insertMention(
+			"mention_missing_root",
+			"recent reply without root",
+			"2026-05-12T10:00:00.000Z",
+		);
+		upsertMentionEdge("mention_missing_root", {
+			id: "mention_missing_root",
+			author_id: "42",
+			text: "recent reply without root",
+			created_at: "2026-05-12T10:00:00.000Z",
+			conversation_id: "root_missing",
+			referenced_tweets: [{ type: "replied_to", id: "parent_missing" }],
+		});
+		mocks.searchRecentByConversationId.mockResolvedValueOnce({
+			data: [
+				{
+					id: "mention_missing_root",
+					author_id: "42",
+					text: "recent reply without root",
+					created_at: "2026-05-12T10:00:00.000Z",
+					conversation_id: "root_missing",
+					referenced_tweets: [{ type: "replied_to", id: "parent_missing" }],
+					in_reply_to_user_id: "43",
+				},
+			],
+			includes: { users: [{ id: "42", username: "sam", name: "Sam" }] },
+			meta: { result_count: 1 },
+		});
+		mocks.getTweetById
+			.mockResolvedValueOnce({
+				data: [
+					{
+						id: "parent_missing",
+						author_id: "43",
+						text: "missing parent",
+						created_at: "2026-05-12T09:55:00.000Z",
+						conversation_id: "root_missing",
+						referenced_tweets: [{ type: "replied_to", id: "root_missing" }],
+						in_reply_to_user_id: "25401953",
+					},
+				],
+				includes: { users: [{ id: "43", username: "alex", name: "Alex" }] },
+			})
+			.mockResolvedValueOnce({
+				data: [
+					{
+						id: "root_missing",
+						author_id: "25401953",
+						text: "missing root",
+						created_at: "2026-05-12T09:50:00.000Z",
+						conversation_id: "root_missing",
+					},
+				],
+				includes: {
+					users: [{ id: "25401953", username: "steipete", name: "Peter" }],
+				},
+			});
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			mode: "xurl",
+			limit: 1,
+			delayMs: 0,
+		});
+		const rows = getNativeDb()
+			.prepare(
+				"select id, reply_to_id from tweets where id in (?, ?, ?) order by id",
+			)
+			.all("mention_missing_root", "parent_missing", "root_missing");
+
+		expect(mocks.getTweetById).toHaveBeenNthCalledWith(1, "parent_missing");
+		expect(mocks.getTweetById).toHaveBeenNthCalledWith(2, "root_missing");
+		expect(result).toMatchObject({
+			mergedTweets: 3,
+			generalReadTweets: 3,
+			results: [
+				expect.objectContaining({
+					tweetId: "mention_missing_root",
+					strategy: "conversation_search+parent_walk",
+					fallbackDepth: 2,
+					count: 3,
+				}),
+			],
+			warnings: expect.arrayContaining([
+				"recent search missed ancestor parent_missing for conversation root_missing; used parent walk",
+			]),
+		});
+		expect(rows).toEqual([
+			{ id: "mention_missing_root", reply_to_id: "parent_missing" },
+			{ id: "parent_missing", reply_to_id: "root_missing" },
+			{ id: "root_missing", reply_to_id: null },
+		]);
+	});
+
 	it("preserves authored tweet kind when xurl context upserts the same tweet", async () => {
 		setupTempHome();
 		insertMention(
@@ -428,14 +525,19 @@ describe("mention thread sync", () => {
 	it("falls back to walking the xurl parent chain for older conversations", async () => {
 		setupTempHome();
 		insertMention("mention_old", "old mention", "2026-05-05T11:00:00.000Z");
-		upsertMentionEdge("mention_old", {
-			id: "mention_old",
-			author_id: "42",
-			text: "old mention",
-			created_at: "2026-05-05T11:00:00.000Z",
-			conversation_id: "root_old",
-			referenced_tweets: [{ type: "replied_to", id: "parent_old" }],
-		});
+		upsertMentionEdge(
+			"mention_old",
+			{
+				id: "mention_old",
+				author_id: "42",
+				text: "old mention",
+				created_at: "2026-05-05T11:00:00.000Z",
+				conversation_id: "root_old",
+				referenced_tweets: [{ type: "replied_to", id: "parent_old" }],
+			},
+			"2026-05-12T10:00:00.000Z",
+			"bird",
+		);
 		mocks.searchRecentByConversationId.mockResolvedValueOnce({
 			data: [],
 			meta: { result_count: 0 },
@@ -478,9 +580,9 @@ describe("mention thread sync", () => {
 		});
 		const chainRows = getNativeDb()
 			.prepare(
-				"select id, kind, reply_to_id from tweets where id in (?, ?) order by id",
+				"select id, kind, reply_to_id from tweets where id in (?, ?, ?) order by id",
 			)
-			.all("parent_old", "root_old");
+			.all("mention_old", "parent_old", "root_old");
 
 		expect(mocks.searchRecentByConversationId).toHaveBeenCalledWith(
 			"root_old",
@@ -490,18 +592,19 @@ describe("mention thread sync", () => {
 		expect(mocks.getTweetById).toHaveBeenNthCalledWith(2, "root_old");
 		expect(result).toMatchObject({
 			source: "xurl",
-			mergedTweets: 2,
+			mergedTweets: 3,
 			generalReadTweets: 2,
 			results: [
 				expect.objectContaining({
 					tweetId: "mention_old",
 					strategy: "parent_walk",
 					fallbackDepth: 2,
-					count: 2,
+					count: 3,
 				}),
 			],
 		});
 		expect(chainRows).toEqual([
+			{ id: "mention_old", kind: "mention", reply_to_id: "parent_old" },
 			{ id: "parent_old", kind: "thread", reply_to_id: "root_old" },
 			{ id: "root_old", kind: "thread", reply_to_id: null },
 		]);
@@ -558,7 +661,7 @@ describe("mention thread sync", () => {
 					tweetId: "mention_deep",
 					strategy: "parent_walk",
 					fallbackDepth: 12,
-					count: 12,
+					count: 13,
 					warnings: expect.arrayContaining([
 						"fallback parent-chain depth cap reached for mention_deep after 12 hops",
 					]),

@@ -24,6 +24,7 @@ interface LocalMention {
 	id: string;
 	replyToId?: string;
 	conversationId?: string;
+	rawTweet?: XurlMentionData;
 }
 
 function assertPositiveInteger(value: number, name: string) {
@@ -215,6 +216,7 @@ function listRecentMentions(
 				typeof rawTweet?.conversation_id === "string"
 					? rawTweet.conversation_id
 					: undefined,
+			rawTweet,
 		};
 	});
 }
@@ -366,10 +368,16 @@ async function fetchParentChainViaXurl({
 	const seenTweetIds = new Set([mention.id]);
 	let nextParentId = mention.replyToId;
 	let fallbackDepth = 0;
+	let generalReadTweets = 0;
+
+	if (mention.rawTweet && mention.rawTweet.id === mention.id) {
+		pages.push({ data: [mention.rawTweet] });
+	}
 
 	if (!nextParentId) {
 		const anchorPayload = await getTweetById(mention.id);
 		pages.push(anchorPayload);
+		generalReadTweets += anchorPayload.data.length;
 		const anchorTweet = anchorPayload.data[0];
 		if (anchorTweet) {
 			seenTweetIds.add(anchorTweet.id);
@@ -396,6 +404,7 @@ async function fetchParentChainViaXurl({
 		fallbackDepth += 1;
 		const parentPayload = await getTweetById(nextParentId);
 		pages.push(parentPayload);
+		generalReadTweets += parentPayload.data.length;
 		const parentTweet = parentPayload.data[0];
 		if (!parentTweet) {
 			break;
@@ -411,8 +420,44 @@ async function fetchParentChainViaXurl({
 		payload,
 		fallbackDepth,
 		warnings,
-		generalReadTweets: payload.data.length,
+		generalReadTweets,
 	};
+}
+
+function findMissingAncestorId(
+	mention: LocalMention,
+	payload: XurlMentionsResponse,
+) {
+	const tweetsById = new Map(payload.data.map((tweet) => [tweet.id, tweet]));
+	const seenTweetIds = new Set<string>([mention.id]);
+	const anchorTweet = tweetsById.get(mention.id) ?? mention.rawTweet;
+	let nextParentId = anchorTweet
+		? getReplyToId(anchorTweet)
+		: mention.replyToId;
+
+	while (nextParentId) {
+		if (seenTweetIds.has(nextParentId)) {
+			return undefined;
+		}
+		const parentTweet = tweetsById.get(nextParentId);
+		if (!parentTweet) {
+			return nextParentId;
+		}
+		seenTweetIds.add(parentTweet.id);
+		nextParentId = parentTweet.in_reply_to_user_id
+			? getReplyToId(parentTweet)
+			: undefined;
+	}
+
+	if (
+		mention.conversationId &&
+		mention.conversationId !== mention.id &&
+		!tweetsById.has(mention.conversationId)
+	) {
+		return mention.conversationId;
+	}
+
+	return undefined;
 }
 
 async function fetchThreadContextViaXurl({
@@ -444,6 +489,26 @@ async function fetchThreadContextViaXurl({
 		maxPages,
 	});
 	if (search.payload.data.length > 0) {
+		const missingAncestorId = findMissingAncestorId(mention, search.payload);
+		if (missingAncestorId) {
+			const fallback = await fetchParentChainViaXurl({
+				mention,
+				maxDepth: maxFallbackDepth,
+			});
+			return {
+				strategy: "conversation_search+parent_walk" as const,
+				pages: search.pages,
+				truncated: search.truncated,
+				payload: mergePayloads([search.payload, fallback.payload]),
+				fallbackDepth: fallback.fallbackDepth,
+				generalReadTweets:
+					search.generalReadTweets + fallback.generalReadTweets,
+				warnings: [
+					`recent search missed ancestor ${missingAncestorId} for conversation ${mention.conversationId}; used parent walk`,
+					...fallback.warnings,
+				],
+			};
+		}
 		return {
 			strategy: "conversation_search" as const,
 			fallbackDepth: 0,
