@@ -273,7 +273,7 @@ describe("mention thread sync", () => {
 			data: [
 				{
 					id: "root_recent",
-					author_id: "25401953",
+					author_id: "77",
 					text: "root post",
 					created_at: "2026-05-12T09:58:00.000Z",
 					conversation_id: "root_recent",
@@ -286,12 +286,12 @@ describe("mention thread sync", () => {
 					created_at: "2026-05-12T10:00:00.000Z",
 					conversation_id: "root_recent",
 					referenced_tweets: [{ type: "replied_to", id: "root_recent" }],
-					in_reply_to_user_id: "25401953",
+					in_reply_to_user_id: "77",
 				},
 			],
 			includes: {
 				users: [
-					{ id: "25401953", username: "steipete", name: "Peter" },
+					{ id: "77", username: "alex", name: "Alex" },
 					{ id: "42", username: "sam", name: "Sam" },
 				],
 			},
@@ -354,6 +354,62 @@ describe("mention thread sync", () => {
 			)
 			.get() as { count: number };
 		expect(edgeCount.count).toBe(2);
+	});
+
+	it("classifies xurl context tweets authored by the account as home", async () => {
+		setupTempHome();
+		insertMention(
+			"mention_own_context",
+			"reply to own context",
+			"2026-05-12T10:00:00.000Z",
+		);
+		upsertMentionEdge("mention_own_context", {
+			id: "mention_own_context",
+			author_id: "42",
+			text: "reply to own context",
+			created_at: "2026-05-12T10:00:00.000Z",
+			conversation_id: "own_context_root",
+		});
+		mocks.searchRecentByConversationId.mockResolvedValue({
+			data: [
+				{
+					id: "own_context_root",
+					author_id: "25401953",
+					text: "own root post",
+					created_at: "2026-05-12T09:58:00.000Z",
+					conversation_id: "own_context_root",
+				},
+				{
+					id: "mention_own_context",
+					author_id: "42",
+					text: "reply to own context",
+					created_at: "2026-05-12T10:00:00.000Z",
+					conversation_id: "own_context_root",
+					referenced_tweets: [{ type: "replied_to", id: "own_context_root" }],
+					in_reply_to_user_id: "25401953",
+				},
+			],
+			includes: {
+				users: [
+					{ id: "25401953", username: "steipete", name: "Peter" },
+					{ id: "42", username: "sam", name: "Sam" },
+				],
+			},
+			meta: { result_count: 2 },
+		});
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		await syncMentionThreads({ mode: "xurl", limit: 1, delayMs: 0 });
+
+		const row = getNativeDb()
+			.prepare("select kind from tweets where id = ?")
+			.get("own_context_root");
+		const home = listTimelineItems({ resource: "home", limit: 10 });
+		expect(row).toEqual({ kind: "home" });
+		expect(home.find((item) => item.id === "own_context_root")).toMatchObject({
+			kind: "home",
+			author: { handle: "steipete" },
+		});
 	});
 
 	it("treats xurl max-pages as a pagination request", async () => {
@@ -439,6 +495,67 @@ describe("mention thread sync", () => {
 					strategy: "conversation_search",
 					pages: 3,
 					count: 3,
+				}),
+			],
+		});
+	});
+
+	it("marks xurl mention-thread syncs partial when max-pages leaves another page", async () => {
+		setupTempHome();
+		insertMention(
+			"mention_truncated",
+			"recent mention in a truncated thread",
+			"2026-05-12T10:00:00.000Z",
+		);
+		upsertMentionEdge("mention_truncated", {
+			id: "mention_truncated",
+			author_id: "42",
+			text: "recent mention in a truncated thread",
+			created_at: "2026-05-12T10:00:00.000Z",
+			conversation_id: "root_truncated",
+		});
+		mocks.searchRecentByConversationId.mockResolvedValue({
+			data: [
+				{
+					id: "root_truncated",
+					author_id: "25401953",
+					text: "root in first truncated page",
+					created_at: "2026-05-12T09:58:00.000Z",
+					conversation_id: "root_truncated",
+				},
+				{
+					id: "mention_truncated",
+					author_id: "42",
+					text: "recent mention in a truncated thread",
+					created_at: "2026-05-12T10:00:00.000Z",
+					conversation_id: "root_truncated",
+					referenced_tweets: [{ type: "replied_to", id: "root_truncated" }],
+					in_reply_to_user_id: "25401953",
+				},
+			],
+			includes: {
+				users: [
+					{ id: "25401953", username: "steipete", name: "Peter" },
+					{ id: "42", username: "sam", name: "Sam" },
+				],
+			},
+			meta: { result_count: 1, next_token: "page-2" },
+		});
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			mode: "xurl",
+			limit: 1,
+			delayMs: 0,
+			maxPages: 1,
+		});
+
+		expect(result).toMatchObject({
+			partial: true,
+			results: [
+				expect.objectContaining({
+					tweetId: "mention_truncated",
+					truncated: true,
 				}),
 			],
 		});
@@ -934,7 +1051,7 @@ describe("mention thread sync", () => {
 		expect(chainRows).toEqual([
 			{ id: "mention_old", kind: "mention", reply_to_id: "parent_old" },
 			{ id: "parent_old", kind: "thread", reply_to_id: "root_old" },
-			{ id: "root_old", kind: "thread", reply_to_id: null },
+			{ id: "root_old", kind: "home", reply_to_id: null },
 		]);
 	});
 

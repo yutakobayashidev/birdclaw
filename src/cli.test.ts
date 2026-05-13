@@ -16,6 +16,7 @@ const exportMentionItemsMock = vi.fn();
 const exportMentionsViaCachedBirdMock = vi.fn();
 const exportMentionsViaCachedXurlMock = vi.fn();
 const syncMentionsMock = vi.fn();
+const syncMentionThreadsMock = vi.fn();
 const syncDirectMessagesViaCachedBirdMock = vi.fn();
 const resolveProfilesForIdsMock = vi.fn();
 const expandUrlsFromTextsMock = vi.fn();
@@ -138,6 +139,10 @@ vi.mock("#/lib/mentions-live", () => ({
 	syncMentions: (...args: unknown[]) => syncMentionsMock(...args),
 }));
 
+vi.mock("#/lib/mention-threads-live", () => ({
+	syncMentionThreads: (...args: unknown[]) => syncMentionThreadsMock(...args),
+}));
+
 vi.mock("#/lib/dms-live", () => ({
 	syncDirectMessagesViaCachedBird: (...args: unknown[]) =>
 		syncDirectMessagesViaCachedBirdMock(...args),
@@ -213,6 +218,7 @@ describe("cli", () => {
 		exportMentionsViaCachedBirdMock.mockReset();
 		exportMentionsViaCachedXurlMock.mockReset();
 		syncMentionsMock.mockReset();
+		syncMentionThreadsMock.mockReset();
 		syncDirectMessagesViaCachedBirdMock.mockReset();
 		resolveProfilesForIdsMock.mockReset();
 		expandUrlsFromTextsMock.mockReset();
@@ -637,6 +643,78 @@ describe("cli", () => {
 			),
 		);
 		expect(process.exitCode).toBe(1);
+	});
+
+	it("marks truncated sync mention-threads as partial with exit code 5", async () => {
+		syncMentionThreadsMock.mockResolvedValueOnce({
+			ok: true,
+			source: "xurl",
+			accountId: "acct_primary",
+			mentions: 1,
+			threads: 1,
+			succeeded: 1,
+			skipped: 0,
+			failed: 0,
+			mergedTweets: 1,
+			uniqueTweets: 1,
+			generalReadTweets: 1,
+			partial: true,
+			options: {
+				mode: "xurl",
+				limit: 5,
+				delayMs: 1500,
+				timeoutMs: 15000,
+				all: false,
+				maxPages: 1,
+				maxFallbackDepth: 12,
+			},
+			results: [
+				{
+					tweetId: "mention_truncated",
+					conversationId: "root_truncated",
+					ok: true,
+					count: 1,
+					strategy: "conversation_search",
+					pages: 1,
+					fallbackDepth: 0,
+					truncated: true,
+				},
+			],
+			failures: [],
+			warnings: [],
+		});
+		const { runCli } = await loadCli();
+
+		await runCli([
+			"node",
+			"birdclaw",
+			"sync",
+			"mention-threads",
+			"--mode",
+			"xurl",
+			"--limit",
+			"5",
+			"--max-pages",
+			"1",
+		]);
+
+		expect(syncMentionThreadsMock).toHaveBeenCalledWith({
+			account: undefined,
+			mode: "xurl",
+			limit: 5,
+			delayMs: 1500,
+			timeoutMs: 15000,
+			all: false,
+			maxPages: 1,
+		});
+		expect(
+			JSON.parse(consoleLogMock.mock.lastCall?.[0] as string),
+		).toMatchObject({
+			ok: true,
+			partial: true,
+			results: [expect.objectContaining({ truncated: true })],
+		});
+		expect(process.exitCode).toBe(5);
 	});
 
 	it("imports an explicit archive path without discovery", async () => {

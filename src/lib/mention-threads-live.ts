@@ -285,7 +285,7 @@ function mergeMentionThreadIntoLocalStore({
 			const handle = author.username.toLowerCase();
 			const kind = mentionIds.has(tweet.id)
 				? "mention"
-				: source === "bird" && handle === accountHandle
+				: handle === accountHandle
 					? "home"
 					: "thread";
 			const replyToId = getReplyToId(tweet);
@@ -691,6 +691,7 @@ export async function syncMentionThreads({
 	const skipped = results.filter((item) =>
 		item.strategy?.startsWith("skipped:"),
 	);
+	const partial = results.some((item) => item.truncated === true);
 	return {
 		ok: true,
 		source: parsedMode,
@@ -703,6 +704,7 @@ export async function syncMentionThreads({
 		mergedTweets,
 		uniqueTweets: uniqueTweetIds.size,
 		generalReadTweets: parsedMode === "xurl" ? generalReadTweets : 0,
+		partial,
 		options: {
 			mode: parsedMode,
 			limit: parsedLimit,

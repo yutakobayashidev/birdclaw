@@ -740,6 +740,9 @@ syncCommand
 			});
 			await autoSyncAfterWrite();
 			print(result, true);
+			if (result.partial) {
+				process.exitCode = 5;
+			}
 		} catch (error) {
 			print(
 				{
