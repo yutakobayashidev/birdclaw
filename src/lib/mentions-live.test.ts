@@ -609,9 +609,9 @@ describe("cached live mentions", () => {
 		});
 		expect(thirdCall).toMatchObject({
 			paginationToken: "start-page-2",
+			startTime: "2026-03-01T00:00:00Z",
 		});
 		expect(thirdCall).not.toHaveProperty("sinceId");
-		expect(thirdCall).not.toHaveProperty("startTime");
 		expect(
 			getNativeDb()
 				.prepare("select kind from tweets where id = ?")
@@ -943,6 +943,7 @@ describe("cached live mentions", () => {
 		expect(firstRunRows.map((row) => row.id)).toEqual(["100", "200", "250"]);
 		expect(JSON.parse(cacheRow?.value_json ?? "{}")).toMatchObject({
 			meta: { next_token: "page-2" },
+			birdclaw: { boundary: { kind: "since", sinceId: "100" } },
 		});
 		await syncMentions({ mode: "xurl" });
 
@@ -952,10 +953,8 @@ describe("cached live mentions", () => {
 		});
 		expect(listMentionsViaXurlMock.mock.calls[1]?.[0]).toMatchObject({
 			paginationToken: "page-2",
+			sinceId: "100",
 		});
-		expect(listMentionsViaXurlMock.mock.calls[1]?.[0]).not.toHaveProperty(
-			"sinceId",
-		);
 		expect(
 			db.prepare("select kind from tweets where id = ?").get("180"),
 		).toEqual({ kind: "mention" });

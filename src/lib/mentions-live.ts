@@ -32,6 +32,11 @@ interface MentionScanShape {
 	pageSize: number;
 	boundary: MentionScanBoundary;
 }
+interface MentionCursorValue extends XurlMentionsResponse {
+	birdclaw?: {
+		boundary?: MentionScanBoundary;
+	};
+}
 
 function getMentionsFetchModeKey({
 	scope,
@@ -229,32 +234,68 @@ function getCachedPaginationToken(
 		: undefined;
 }
 
+function parseCachedMentionBoundary(
+	value: MentionCursorValue | XurlMentionsResponse,
+	fallbackBoundary?: MentionScanBoundary,
+) {
+	const boundary = (value as MentionCursorValue).birdclaw?.boundary;
+	if (!boundary || typeof boundary !== "object") {
+		return fallbackBoundary;
+	}
+	if (boundary.kind === "unbounded" || boundary.kind === "auto") {
+		return boundary;
+	}
+	if (boundary.kind === "since" && typeof boundary.sinceId === "string") {
+		return boundary;
+	}
+	if (boundary.kind === "start" && typeof boundary.startTime === "string") {
+		return boundary;
+	}
+	return fallbackBoundary;
+}
+
+function addMentionCursorBoundary(
+	payload: XurlMentionsResponse,
+	boundary: MentionScanBoundary,
+): MentionCursorValue {
+	return {
+		...payload,
+		birdclaw: { boundary },
+	};
+}
+
 function readMentionCursor({
 	db,
+	shape,
 	cursorKey,
 	legacyCursorKeys,
 }: {
 	db: Database;
+	shape: MentionScanShape;
 	cursorKey: string;
 	legacyCursorKeys: string[];
 }) {
-	const current = readSyncCache<XurlMentionsResponse>(cursorKey, db);
+	const fallbackBoundary =
+		shape.boundary.kind === "auto" ? undefined : shape.boundary;
+	const current = readSyncCache<MentionCursorValue>(cursorKey, db);
 	const currentToken = getCachedPaginationToken(current);
 	if (current && currentToken) {
 		return {
 			key: cursorKey,
 			token: currentToken,
+			boundary: parseCachedMentionBoundary(current.value, fallbackBoundary),
 			legacyKeys: [] as string[],
 		};
 	}
 
 	for (const legacyKey of legacyCursorKeys) {
-		const legacy = readSyncCache<XurlMentionsResponse>(legacyKey, db);
+		const legacy = readSyncCache<MentionCursorValue>(legacyKey, db);
 		const legacyToken = getCachedPaginationToken(legacy);
 		if (legacy && legacyToken) {
 			return {
 				key: legacyKey,
 				token: legacyToken,
+				boundary: parseCachedMentionBoundary(legacy.value, fallbackBoundary),
 				legacyKeys: [legacyKey],
 			};
 		}
@@ -649,9 +690,18 @@ export async function syncMentions({
 	const legacyCursorKeys = getLegacyMentionCursorKeys(cursorShape);
 	const cursor =
 		parsedMode === "xurl"
-			? readMentionCursor({ db, cursorKey, legacyCursorKeys })
+			? readMentionCursor({
+					db,
+					shape: cursorShape,
+					cursorKey,
+					legacyCursorKeys,
+				})
 			: undefined;
 	const startPaginationToken = cursor?.token;
+	const cursorSinceId =
+		cursor?.boundary?.kind === "since" ? cursor.boundary.sinceId : undefined;
+	const cursorStartTime =
+		cursor?.boundary?.kind === "start" ? cursor.boundary.startTime : undefined;
 	const seededSinceId =
 		parsedMode === "xurl" &&
 		!explicitSinceId &&
@@ -660,10 +710,13 @@ export async function syncMentions({
 			? findNewestArchiveMentionId(db, resolvedAccount.accountId)
 			: undefined;
 	const resolvedSinceId = startPaginationToken
-		? undefined
+		? cursorSinceId
 		: (explicitSinceId ?? seededSinceId);
-	const resolvedStartTime =
-		!resolvedSinceId && !startPaginationToken ? explicitStartTime : undefined;
+	const resolvedStartTime = startPaginationToken
+		? cursorStartTime
+		: !resolvedSinceId
+			? explicitStartTime
+			: undefined;
 	const resultShape: MentionScanShape = {
 		endpoint: "mentions",
 		mode: parsedMode,
@@ -748,7 +801,17 @@ export async function syncMentions({
 	const payloadPaginationToken = getCachedPaginationToken({ value: payload });
 	if (parsedMode === "xurl") {
 		if (payloadPaginationToken) {
-			writeSyncCache(cursorKey, payload, db);
+			writeSyncCache(
+				cursorKey,
+				addMentionCursorBoundary(
+					payload,
+					getMentionRequestBoundary({
+						sinceId: resolvedSinceId,
+						startTime: resolvedStartTime,
+					}),
+				),
+				db,
+			);
 			deleteSyncCache(resultCacheKey, db);
 			deleteSyncCache(
 				getMentionResultCacheKey({
