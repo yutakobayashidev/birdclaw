@@ -500,6 +500,68 @@ describe("mention thread sync", () => {
 		});
 	});
 
+	it("does not mark default one-page xurl conversation scans as partial", async () => {
+		setupTempHome();
+		insertMention(
+			"mention_large_default",
+			"recent mention in large thread",
+			"2026-05-12T10:00:00.000Z",
+		);
+		upsertMentionEdge("mention_large_default", {
+			id: "mention_large_default",
+			author_id: "42",
+			text: "recent mention in large thread",
+			created_at: "2026-05-12T10:00:00.000Z",
+			conversation_id: "root_large_default",
+		});
+		mocks.searchRecentByConversationId.mockResolvedValue({
+			data: [
+				{
+					id: "root_large_default",
+					author_id: "25401953",
+					text: "root in first page",
+					created_at: "2026-05-12T09:58:00.000Z",
+					conversation_id: "root_large_default",
+				},
+				{
+					id: "mention_large_default",
+					author_id: "42",
+					text: "recent mention in large thread",
+					created_at: "2026-05-12T10:00:00.000Z",
+					conversation_id: "root_large_default",
+					referenced_tweets: [{ type: "replied_to", id: "root_large_default" }],
+					in_reply_to_user_id: "25401953",
+				},
+			],
+			includes: {
+				users: [
+					{ id: "25401953", username: "steipete", name: "Peter" },
+					{ id: "42", username: "sam", name: "Sam" },
+				],
+			},
+			meta: { result_count: 2, next_token: "page-2" },
+		});
+		const { syncMentionThreads } = await import("./mention-threads-live");
+
+		const result = await syncMentionThreads({
+			mode: "xurl",
+			limit: 1,
+			delayMs: 0,
+		});
+
+		expect(mocks.searchRecentByConversationId).toHaveBeenCalledTimes(1);
+		expect(result).toMatchObject({
+			partial: false,
+			results: [
+				expect.objectContaining({
+					tweetId: "mention_large_default",
+					pages: 1,
+					truncated: false,
+				}),
+			],
+		});
+	});
+
 	it("marks xurl mention-thread syncs partial when max-pages leaves another page", async () => {
 		setupTempHome();
 		insertMention(

@@ -354,10 +354,11 @@ async function fetchConversationViaRecentSearch({
 	);
 
 	const payload = mergePayloads(pages);
+	const paginationRequested = all || maxPages !== undefined;
 	return {
 		payload,
 		pages: pageCount,
-		truncated: Boolean(nextToken),
+		truncated: paginationRequested && Boolean(nextToken),
 		generalReadTweets: payload.data.length,
 	};
 }
