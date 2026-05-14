@@ -375,6 +375,50 @@ describe("media fetch", () => {
 		);
 	});
 
+	it("reuses archive mp4 bytes before CDN video variants", async () => {
+		const root = home();
+		const mediaDir = path.join(root, "media", "originals");
+		mkdirSync(mediaDir, { recursive: true });
+		writeFileSync(path.join(mediaDir, "thumb.jpg"), "cached thumb");
+		const archiveFile = archiveTweetFile(
+			root,
+			"tweet_1",
+			"archive-clip",
+			".mp4",
+		);
+		mkdirSync(path.dirname(archiveFile), { recursive: true });
+		writeFileSync(archiveFile, Buffer.from([8, 7, 6]));
+		insertTweet("tweet_1", [
+			{
+				url: "https://pbs.twimg.com/ext_tw_video_thumb/thumb.jpg",
+				type: "video",
+				variants: [
+					{
+						url: "https://video.twimg.com/ext_tw_video/1/pu/vid/720x720/cdn-clip.mp4",
+						contentType: "video/mp4",
+						bitRate: 2176000,
+					},
+				],
+			},
+		]);
+		const fetchMock = vi.fn(async () => {
+			throw new Error("must not fetch video");
+		});
+
+		const result = await fetchTweetMedia({ fetchImpl: fetchMock, pacingMs: 0 });
+
+		expect(result).toMatchObject({
+			videos_fetched: 1,
+			reused_from_archive: 1,
+			skipped_cached: 1,
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(readFileSync(path.join(mediaDir, "archive-clip.mp4"))).toEqual(
+			Buffer.from([8, 7, 6]),
+		);
+		expect(existsSync(path.join(mediaDir, "cdn-clip.mp4"))).toBe(false);
+	});
+
 	it("backs off and retries once after 429", async () => {
 		const root = home();
 		insertTweet("tweet_1", [pbs("demo")]);

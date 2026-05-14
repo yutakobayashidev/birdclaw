@@ -296,12 +296,13 @@ function rowCandidates(row: Row, dir: string, includeVideo: boolean) {
 			if (image) candidates.push(image);
 		}
 		if (includeVideo) {
-			const video = videoCandidate(item, dir, row.id);
-			if (video) {
-				candidates.push(video);
-			} else {
-				candidates.push(...archiveVideoCandidates(item, dir, row.id));
+			const archiveVideos = archiveVideoCandidates(item, dir, row.id);
+			if (archiveVideos.length > 0) {
+				candidates.push(...archiveVideos);
+				continue;
 			}
+			const video = videoCandidate(item, dir, row.id);
+			if (video) candidates.push(video);
 		}
 	}
 	return candidates;
