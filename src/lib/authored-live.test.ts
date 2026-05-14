@@ -748,6 +748,51 @@ describe("live authored tweet sync", () => {
 		});
 	});
 
+	it("commits archive baseline after selected tweet import invalidates authored cursor", async () => {
+		makeTempHome();
+		const { importArchive } = await import("./archive-import");
+		await importArchive(makeArchiveWithTweet("800"));
+		getNativeDb()
+			.prepare(
+				"insert into sync_cache (cache_key, value_json, updated_at) values (?, ?, ?)",
+			)
+			.run(
+				"authored:xurl:acct_primary:cursor",
+				JSON.stringify({ state: "committed", sinceId: "900" }),
+				"2026-05-12T12:00:00.000Z",
+			);
+		getNativeDb()
+			.prepare(
+				"insert into sync_cache (cache_key, value_json, updated_at) values (?, ?, ?)",
+			)
+			.run(
+				"authored:xurl:acct_studio:cursor",
+				JSON.stringify({ state: "committed", sinceId: "1200" }),
+				"2026-05-12T12:00:00.000Z",
+			);
+		await importArchive(makeArchiveWithTweet("1000"), { select: ["tweets"] });
+		mocks.listUserTweets.mockResolvedValueOnce({
+			items: [],
+			nextToken: null,
+		});
+		const { syncAuthoredTweets } = await import("./authored-live");
+
+		await syncAuthoredTweets({ limit: 5 });
+
+		expect(mocks.listUserTweets).toHaveBeenCalledWith(
+			"25401953",
+			expect.objectContaining({ sinceId: "1000" }),
+		);
+		expect(authoredCursor()).toEqual({
+			state: "committed",
+			sinceId: "1000",
+		});
+		expect(authoredCursor("acct_studio")).toEqual({
+			state: "committed",
+			sinceId: "1200",
+		});
+	});
+
 	it("stores and resumes matching until_id tokens without moving since_id", async () => {
 		makeTempHome();
 		getNativeDb()
