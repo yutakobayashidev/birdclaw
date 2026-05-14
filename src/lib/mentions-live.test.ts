@@ -349,6 +349,57 @@ describe("cached live mentions", () => {
 		});
 	});
 
+	it("advances completed xurl mention syncs from live high-water", async () => {
+		makeTempHome();
+		clearLocalMentionRows();
+		insertLocalMentionBaseline({ tweetId: "1000" });
+		listMentionsViaXurlMock
+			.mockResolvedValueOnce({
+				data: [
+					{
+						id: "1050",
+						author_id: "42",
+						text: "first newer live mention",
+						created_at: "2026-03-09T02:00:00.000Z",
+					},
+					{
+						id: "1100",
+						author_id: "43",
+						text: "newest live mention",
+						created_at: "2026-03-09T02:01:00.000Z",
+					},
+				],
+				meta: { result_count: 2 },
+			})
+			.mockResolvedValueOnce({
+				data: [],
+				meta: { result_count: 0 },
+			});
+		const { syncMentions } = await import("./mentions-live");
+
+		await syncMentions({
+			account: "acct_primary",
+			mode: "xurl",
+			limit: 5,
+			refresh: true,
+		});
+		await syncMentions({
+			account: "acct_primary",
+			mode: "xurl",
+			limit: 5,
+			refresh: true,
+		});
+
+		expect(listMentionsViaXurlMock).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ sinceId: "1000" }),
+		);
+		expect(listMentionsViaXurlMock).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ sinceId: "1100" }),
+		);
+	});
+
 	it("does not seed first-run xurl mention sync from live-only mention edges", async () => {
 		makeTempHome();
 		clearLocalMentionRows();

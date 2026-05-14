@@ -37,6 +37,9 @@ interface MentionCursorValue extends XurlMentionsResponse {
 		boundary?: MentionScanBoundary;
 	};
 }
+interface MentionHighWaterValue {
+	sinceId: string;
+}
 
 function getMentionsFetchModeKey({
 	scope,
@@ -121,6 +124,16 @@ function getMentionResultCacheKey({
 	maxPages: number | null;
 }) {
 	return `mentions:sync:result:v2:${getMentionScanShapeKey(shape)}:${all ? "all" : "single"}:${maxPages === null ? "all-pages" : String(maxPages)}`;
+}
+
+function getMentionHighWaterKey({
+	mode,
+	accountId,
+}: {
+	mode: MentionSyncMode;
+	accountId: string;
+}) {
+	return `mentions:sync:high-water:v1:mode=${mode}:account=${encodeCacheKeyPart(accountId)}`;
 }
 
 function getMentionCursorBoundary({
@@ -302,6 +315,57 @@ function readMentionCursor({
 	}
 
 	return undefined;
+}
+
+function isNumericTweetId(value: string | undefined | null): value is string {
+	return typeof value === "string" && /^[0-9]+$/.test(value);
+}
+
+function maxNumericTweetId(...ids: Array<string | undefined | null>) {
+	return ids.filter(isNumericTweetId).reduce<string | undefined>((max, id) => {
+		if (!max) {
+			return id;
+		}
+		if (id.length !== max.length) {
+			return id.length > max.length ? id : max;
+		}
+		return id > max ? id : max;
+	}, undefined);
+}
+
+function getNewestMentionId(payload: XurlMentionsResponse) {
+	return maxNumericTweetId(
+		typeof payload.meta?.newest_id === "string"
+			? payload.meta.newest_id
+			: undefined,
+		...payload.data.map((tweet) => tweet.id),
+	);
+}
+
+function readMentionHighWaterId(
+	db: Database,
+	mode: MentionSyncMode,
+	accountId: string,
+) {
+	const cached = readSyncCache<MentionHighWaterValue>(
+		getMentionHighWaterKey({ mode, accountId }),
+		db,
+	);
+	return isNumericTweetId(cached?.value.sinceId)
+		? cached.value.sinceId
+		: undefined;
+}
+
+function writeMentionHighWaterId(
+	db: Database,
+	mode: MentionSyncMode,
+	accountId: string,
+	sinceId: string | undefined,
+) {
+	if (!isNumericTweetId(sinceId)) {
+		return;
+	}
+	writeSyncCache(getMentionHighWaterKey({ mode, accountId }), { sinceId }, db);
 }
 
 function resolveAccount(db: Database, accountId?: string) {
@@ -702,12 +766,19 @@ export async function syncMentions({
 		cursor?.boundary?.kind === "since" ? cursor.boundary.sinceId : undefined;
 	const cursorStartTime =
 		cursor?.boundary?.kind === "start" ? cursor.boundary.startTime : undefined;
+	const committedSinceId =
+		parsedMode === "xurl" &&
+		cursorShape.boundary.kind === "auto" &&
+		!startPaginationToken
+			? readMentionHighWaterId(db, parsedMode, resolvedAccount.accountId)
+			: undefined;
 	const seededSinceId =
 		parsedMode === "xurl" &&
 		!explicitSinceId &&
 		!explicitStartTime &&
 		!startPaginationToken
-			? findNewestArchiveMentionId(db, resolvedAccount.accountId)
+			? (committedSinceId ??
+				findNewestArchiveMentionId(db, resolvedAccount.accountId))
 			: undefined;
 	const resolvedSinceId = startPaginationToken
 		? cursorSinceId
@@ -828,6 +899,14 @@ export async function syncMentions({
 			deleteSyncCache(cursorKey, db);
 			for (const legacyKey of legacyCursorKeys) {
 				deleteSyncCache(legacyKey, db);
+			}
+			if (cursorShape.boundary.kind === "auto") {
+				writeMentionHighWaterId(
+					db,
+					parsedMode,
+					resolvedAccount.accountId,
+					maxNumericTweetId(resolvedSinceId, getNewestMentionId(payload)),
+				);
 			}
 		}
 	}
