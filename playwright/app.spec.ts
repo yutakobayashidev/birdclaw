@@ -1,12 +1,21 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+async function selectAccount(page: Page, accountHandle: string) {
+	await page.getByRole("button", { name: /^Active account:/ }).click();
+	await page.getByRole("option", { name: new RegExp(accountHandle) }).click();
+	await expect(
+		page.getByRole("button", {
+			name: new RegExp(`^Active account: ${accountHandle}$`),
+		}),
+	).toBeVisible();
+}
 
 test("navigates across the primary surfaces", async ({ page }) => {
 	await page.goto("/");
 
 	await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
-	await expect(
-		page.getByText("Fast search for your Twitter archive."),
-	).toBeVisible();
+	await expect(page.getByText("Fast search for your archive.")).toBeVisible();
 	await expect(
 		page.getByRole("button", { name: "Sync timeline" }),
 	).toBeVisible();
@@ -78,11 +87,7 @@ test("manual sync controls post to the sync endpoint", async ({ page }) => {
 		});
 	});
 
-	async function clickSync(
-		path: string,
-		buttonName: string,
-		expectedAccountId?: string,
-	) {
+	async function clickSync(path: string, buttonName: string) {
 		const statusReady = page.waitForResponse(
 			(response) =>
 				response.url().includes("/api/status") &&
@@ -97,11 +102,6 @@ test("manual sync controls post to the sync endpoint", async ({ page }) => {
 		);
 		await page.goto(path);
 		await Promise.all([statusReady, routeDataReady]);
-		if (expectedAccountId) {
-			await expect(page.getByLabel("Sync account")).toHaveValue(
-				expectedAccountId,
-			);
-		}
 		const button = page.getByRole("button", { name: buttonName });
 		await expect(button).toBeEnabled();
 		const request = page.waitForRequest(
@@ -112,9 +112,9 @@ test("manual sync controls post to the sync endpoint", async ({ page }) => {
 	}
 
 	await clickSync("/", "Sync timeline");
-	await clickSync("/mentions", "Sync mentions", "acct_primary");
-	await clickSync("/likes", "Sync likes", "acct_primary");
-	await clickSync("/bookmarks", "Sync bookmarks", "acct_primary");
+	await clickSync("/mentions", "Sync mentions");
+	await clickSync("/likes", "Sync likes");
+	await clickSync("/bookmarks", "Sync bookmarks");
 	await clickSync("/dms", "Sync DMs");
 
 	await expect
@@ -132,7 +132,7 @@ test("filters the home timeline by reply state", async ({ page }) => {
 	await page.goto("/");
 
 	const cards = page.locator('[data-perf="timeline-card"]');
-	await expect(cards).toHaveCount(4);
+	await expect(cards).toHaveCount(3);
 	await expect(page.getByLabel("Part of a conversation").first()).toBeVisible();
 
 	await page.getByRole("button", { name: /^Replied$/ }).click();
@@ -141,7 +141,7 @@ test("filters the home timeline by reply state", async ({ page }) => {
 	await expect(page.getByLabel("We replied").first()).toBeVisible();
 
 	await page.getByRole("button", { name: /^Unreplied$/ }).click();
-	await expect(cards).toHaveCount(3);
+	await expect(cards).toHaveCount(2);
 	await expect(page.getByLabel("Reply open").first()).toBeVisible();
 });
 
@@ -182,6 +182,7 @@ test("expands timeline cards with media, quote context, and profile hover", asyn
 		),
 	).toBeVisible();
 
+	await selectAccount(page, "@birdclaw_lab");
 	const quoteCard = page.locator('[data-perf="timeline-card"]').filter({
 		hasText: "Agents need retrieval surfaces",
 	});
@@ -197,7 +198,7 @@ test("searches saved likes and bookmarks", async ({ page }) => {
 	await page.goto("/likes");
 
 	const likeCards = page.locator('[data-perf="timeline-card"]');
-	await expect(likeCards).toHaveCount(3);
+	await expect(likeCards).toHaveCount(2);
 	await page.getByPlaceholder("Search likes").fill("pruning");
 	await expect(likeCards).toHaveCount(1);
 	await expect(likeCards.first()).toContainText("pruning scope");
@@ -205,10 +206,10 @@ test("searches saved likes and bookmarks", async ({ page }) => {
 	await page.goto("/bookmarks");
 
 	const bookmarkCards = page.locator('[data-perf="timeline-card"]');
-	await expect(bookmarkCards).toHaveCount(2);
-	await page.getByPlaceholder("Search bookmarks").fill("Agents need");
 	await expect(bookmarkCards).toHaveCount(1);
-	await expect(bookmarkCards.first()).toContainText("retrieval surfaces");
+	await page.getByPlaceholder("Search bookmarks").fill("local-first");
+	await expect(bookmarkCards).toHaveCount(1);
+	await expect(bookmarkCards.first()).toContainText("local-first");
 });
 
 test("browses link insights across links, videos, filters, and comments", async ({
@@ -333,9 +334,19 @@ test("adds and removes a local blocklist entry", async ({ page }) => {
 test("switches theme and keeps it after reload", async ({ page }) => {
 	await page.goto("/");
 
-	const darkButton = page.getByRole("button", { name: "Dark theme" });
-	await expect(darkButton).toBeEnabled();
-	await darkButton.click();
+	const themeButton = page.getByTestId("theme-toggle");
+	await expect(
+		page.getByRole("button", {
+			name: "Theme: System default. Switch to Light theme.",
+		}),
+	).toBeEnabled();
+	await themeButton.click();
+	await expect(
+		page.getByRole("button", {
+			name: "Theme: Light theme. Switch to Dark theme.",
+		}),
+	).toBeEnabled();
+	await themeButton.click();
 	await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 	await expect(page.locator("html")).toHaveAttribute(
 		"data-theme-preference",

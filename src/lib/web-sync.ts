@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { maybeAutoSyncBackupEffect } from "./backup";
 import { getBirdclawPaths } from "./config";
 import { syncDirectMessagesViaCachedBirdEffect } from "./dms-live";
-import { runEffectPromise } from "./effect-runtime";
+import { runEffectBackground, runEffectPromise } from "./effect-runtime";
 import { syncMentionThreadsEffect } from "./mention-threads-live";
 import { syncMentionsEffect } from "./mentions-live";
 import NativeSqliteDatabase from "./sqlite";
@@ -93,6 +93,10 @@ function readBoolean(value: unknown, key: string) {
 	assertRecord(value);
 	const raw = value[key];
 	return typeof raw === "boolean" ? raw : undefined;
+}
+
+function messageFromError(error: unknown) {
+	return error instanceof Error ? error.message : String(error);
 }
 
 export function parseWebSyncKind(value: unknown): WebSyncKind | null {
@@ -256,13 +260,6 @@ export function performWebSyncEffect(kind: WebSyncKind, accountId?: string) {
 	});
 }
 
-function performWebSync(
-	kind: WebSyncKind,
-	accountId?: string,
-): Promise<WebSyncResponse> {
-	return runEffectPromise(performWebSyncEffect(kind, accountId));
-}
-
 function createWebSyncJobId(kind: WebSyncKind) {
 	return `sync_${kind}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -339,7 +336,7 @@ function toFailedResponse(
 	accountId?: string,
 ): WebSyncResponse {
 	const finishedAt = new Date().toISOString();
-	const message = error instanceof Error ? error.message : "Sync failed";
+	const message = messageFromError(error);
 	return {
 		ok: false,
 		kind,
@@ -376,8 +373,8 @@ export function startWebSync(
 	webSyncJobKeys.set(job.id, syncKey);
 	setJobSnapshot(job);
 
-	void performWebSync(kind, effectiveAccountId)
-		.then((result) => {
+	runEffectBackground(performWebSyncEffect(kind, effectiveAccountId), {
+		onSuccess: (result) => {
 			setJobSnapshot({
 				...job,
 				status: "succeeded",
@@ -386,8 +383,8 @@ export function startWebSync(
 				inProgress: false,
 				result,
 			});
-		})
-		.catch((error: unknown) => {
+		},
+		onFailure: (error) => {
 			const result = toFailedResponse(
 				kind,
 				startedAt,
@@ -403,7 +400,8 @@ export function startWebSync(
 				result,
 				error: result.error,
 			});
-		});
+		},
+	});
 
 	return job;
 }
