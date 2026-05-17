@@ -1834,16 +1834,36 @@ function refreshDmConversationState(
 	db: Database,
 	conversationId: string,
 	lastMessageAt: string,
+	observedLastMessageAt = lastMessageAt,
 ) {
 	db.prepare(
 		`
     update dm_conversations
-    set last_message_at = ?,
-        unread_count = 0,
-        needs_reply = 0
+    set last_message_at = case
+          when last_message_at < ? then ?
+          else last_message_at
+        end,
+        unread_count = case
+          when last_message_at = ? then 0
+          when last_message_at <= ? then 0
+          else unread_count
+        end,
+        needs_reply = case
+          when last_message_at = ? then 0
+          when last_message_at <= ? then 0
+          else needs_reply
+        end
     where id = ?
     `,
-	).run(lastMessageAt, conversationId);
+	).run(
+		lastMessageAt,
+		lastMessageAt,
+		observedLastMessageAt,
+		lastMessageAt,
+		observedLastMessageAt,
+		lastMessageAt,
+		conversationId,
+	);
 }
 
 function getLocalAuthorProfileId(accountId: string) {
@@ -2051,6 +2071,7 @@ export function createDmReplyEffect(conversationId: string, text: string) {
 				authorProfileId,
 				createdAt: new Date().toISOString(),
 				handle: conversation.conversation.participant.handle,
+				observedLastMessageAt: conversation.conversation.lastMessageAt,
 				outboundId: `msg_${randomUUID()}`,
 			};
 			preflightWrite((db) => {
@@ -2072,7 +2093,12 @@ export function createDmReplyEffect(conversationId: string, text: string) {
 					text,
 				);
 
-				refreshDmConversationState(db, conversationId, dmDraft.createdAt);
+				refreshDmConversationState(
+					db,
+					conversationId,
+					dmDraft.createdAt,
+					dmDraft.observedLastMessageAt,
+				);
 			});
 			return dmDraft;
 		});
@@ -2101,7 +2127,12 @@ export function createDmReplyEffect(conversationId: string, text: string) {
 					text,
 				);
 
-				refreshDmConversationState(db, conversationId, draft.createdAt);
+				refreshDmConversationState(
+					db,
+					conversationId,
+					draft.createdAt,
+					draft.observedLastMessageAt,
+				);
 			}),
 		);
 

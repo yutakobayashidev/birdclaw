@@ -1328,6 +1328,72 @@ describe("birdclaw queries", () => {
 		expect(mocks.dmViaXurl).toHaveBeenCalledWith("amelia", "Send it over.");
 	});
 
+	it("clears dm reply pressure when the existing timestamp is future-dated", async () => {
+		setupTempHome();
+		const db = getNativeDb();
+		const futureAt = "2099-01-01T00:00:00.000Z";
+		db.prepare(
+			"update dm_conversations set last_message_at = ?, unread_count = 2, needs_reply = 1 where id = 'dm_003'",
+		).run(futureAt);
+
+		await createDmReply("dm_003", "Reply to future state.");
+
+		expect(
+			db
+				.prepare(
+					"select last_message_at, needs_reply, unread_count from dm_conversations where id = ?",
+				)
+				.get("dm_003"),
+		).toEqual({
+			last_message_at: futureAt,
+			needs_reply: 0,
+			unread_count: 0,
+		});
+	});
+
+	it("preserves newer dm sync state when it lands during live send", async () => {
+		setupTempHome();
+		const db = getNativeDb();
+		const newerInboundAt = "2099-01-01T00:00:00.000Z";
+		mocks.dmViaXurl.mockImplementationOnce(async () => {
+			db.prepare(
+				`
+        insert into dm_messages (
+          id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
+        ) values ('msg_newer_sync', 'dm_003', 'profile_amelia', 'newer inbound', ?, 'inbound', 0, 0)
+        `,
+			).run(newerInboundAt);
+			db.prepare("insert into dm_fts (message_id, text) values (?, ?)").run(
+				"msg_newer_sync",
+				"newer inbound",
+			);
+			db.prepare(
+				"update dm_conversations set last_message_at = ?, unread_count = 1, needs_reply = 1 where id = 'dm_003'",
+			).run(newerInboundAt);
+			return { ok: true, output: "sent" };
+		});
+
+		const result = await createDmReply("dm_003", "Reply after sync.");
+		const conversation = db
+			.prepare(
+				"select last_message_at, needs_reply, unread_count from dm_conversations where id = ?",
+			)
+			.get("dm_003");
+		const outbound = db
+			.prepare("select direction, text from dm_messages where id = ?")
+			.get(result.messageId);
+
+		expect(outbound).toEqual({
+			direction: "outbound",
+			text: "Reply after sync.",
+		});
+		expect(conversation).toEqual({
+			last_message_at: newerInboundAt,
+			needs_reply: 1,
+			unread_count: 1,
+		});
+	});
+
 	it("does not persist dm replies when transport fails", async () => {
 		setupTempHome();
 		const db = getNativeDb();
