@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- Align DM profile stat labels and values consistently in the web detail panel.
 - Keep outbound DM bubble text readable by separating inbound and outbound bubble color classes in the web UI.
 - Link AI digest tweet citations on readable text instead of leaking raw `tweet_...` ids when the model cites a local tweet by prefixed id.
 - Hydrate profile metadata for Today highlight tweets so real avatar images replace fallback initials after cached digest results render.

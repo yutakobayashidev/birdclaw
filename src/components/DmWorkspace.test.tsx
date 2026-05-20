@@ -128,6 +128,9 @@ describe("DmWorkspace", () => {
 		expect(screen.getByText("replied")).toBeInTheDocument();
 		expect(screen.getAllByText("We replied").length).toBeGreaterThan(1);
 		expect(screen.getByText("@steipete")).toBeInTheDocument();
+		const followersLabel = screen.getByText("Followers");
+		expect(followersLabel.parentElement).toHaveClass("items-center");
+		expect(screen.getByText("3M")).toHaveClass("whitespace-nowrap");
 		expect(screen.getByRole("button", { name: "Send reply" })).toBeDisabled();
 		const outboundMessage = screen.getByText("done");
 		expect(outboundMessage).toBeInTheDocument();

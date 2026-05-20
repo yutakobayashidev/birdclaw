@@ -504,8 +504,10 @@ export const contextBioClass = "text-[14px] leading-[1.4] text-[var(--ink)]";
 export const contextStatsClass = "flex flex-col gap-0";
 
 export const contextStatRowClass =
-	"flex items-baseline justify-between border-t border-[var(--line)] py-2 first:border-t-0 first:pt-0";
+	"grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-[var(--line)] py-2 first:border-t-0 first:pt-0";
 
-export const contextStatTermClass = "text-[13px] text-[var(--ink-soft)]";
+export const contextStatTermClass =
+	"min-w-0 text-[13px] text-[var(--ink-soft)]";
 
-export const contextStatValueClass = "text-[14px] font-bold text-[var(--ink)]";
+export const contextStatValueClass =
+	"shrink-0 whitespace-nowrap text-right text-[14px] font-bold text-[var(--ink)]";
