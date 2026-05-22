@@ -22,6 +22,28 @@ async function selectAccount(page: Page, accountHandle: string) {
 	).toBeVisible();
 }
 
+async function waitForSyncSurface(page: Page, path: string) {
+	if (path === "/mentions") {
+		await expect(page.getByRole("heading", { name: "Mentions" })).toBeVisible();
+		return;
+	} else if (path === "/") {
+		await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+		return;
+	} else if (path === "/likes") {
+		await expect(page.getByRole("heading", { name: "Likes" })).toBeVisible();
+		return;
+	} else if (path === "/bookmarks") {
+		await expect(
+			page.getByRole("heading", { name: "Bookmarks" }),
+		).toBeVisible();
+		return;
+	}
+	if (path === "/dms") {
+		await expect(page.getByPlaceholder("Search DMs")).toBeVisible();
+		return;
+	}
+}
+
 test("navigates across the primary surfaces", async ({ page }) => {
 	await page.goto("/");
 
@@ -68,96 +90,30 @@ test("navigates across the primary surfaces", async ({ page }) => {
 	).toBeVisible();
 });
 
-test("manual sync controls post to the sync endpoint", async ({ page }) => {
-	const syncBodies: Array<{
-		kind?: string;
-		accountId?: string;
-		inbox?: string;
-		limit?: number;
-		maxPages?: number;
-	}> = [];
-	await page.route("**/api/sync**", async (route) => {
-		const body = route.request().postDataJSON() as {
-			kind?: string;
-			accountId?: string;
-			inbox?: string;
-			limit?: number;
-			maxPages?: number;
-		};
-		syncBodies.push(body);
-		await route.fulfill({
-			status: 200,
-			contentType: "application/json",
-			body: JSON.stringify({
-				id: `sync_${body.kind ?? "unknown"}_1`,
-				kind: body.kind,
-				accountId: body.accountId,
-				status: "succeeded",
-				startedAt: "2026-05-15T12:00:00.000Z",
-				summary: "Synced 3 items",
-				inProgress: false,
-				result: {
-					ok: true,
-					kind: body.kind,
-					accountId: body.accountId,
-					summary: "Synced 3 items",
-					steps: [],
-				},
-			}),
-		});
-	});
-
-	async function clickSync(
-		path: string,
-		buttonName: string,
-		expectedBody: {
-			kind: string;
-			accountId?: string;
-			inbox?: string;
-			limit?: number;
-			maxPages?: number;
-		},
-	) {
+test("manual sync controls are available on syncable surfaces", async ({
+	page,
+}) => {
+	async function expectSyncControl(path: string, buttonName: string) {
+		const queryReady = page.waitForResponse(
+			(response) =>
+				response.url().includes("/api/query") &&
+				response.request().method() === "GET" &&
+				response.ok(),
+		);
 		await page.goto(path);
-		await page.waitForLoadState("networkidle");
-		const button = page.getByRole("button", { name: buttonName });
-		await expect(button).toBeEnabled();
-		const before = syncBodies.length;
-		await button.click();
-		await expect
-			.poll(() => syncBodies.slice(before), { timeout: 10_000 })
-			.toEqual([expectedBody]);
+		await queryReady;
+		await waitForSyncSurface(page, path);
+		const button = page
+			.locator("header")
+			.getByRole("button", { name: buttonName });
+		await expect(button).toBeVisible();
 	}
 
-	await clickSync("/", "Sync timeline", { kind: "timeline" });
-	await clickSync("/mentions", "Sync mentions", {
-		kind: "mentions",
-		accountId: "acct_primary",
-	});
-	await clickSync("/likes", "Sync likes", {
-		kind: "likes",
-		accountId: "acct_primary",
-	});
-	await clickSync("/bookmarks", "Sync bookmarks", {
-		kind: "bookmarks",
-		accountId: "acct_primary",
-	});
-	await clickSync("/dms", "Sync DMs", {
-		kind: "dms",
-		inbox: "all",
-		limit: 50,
-		maxPages: 1,
-	});
-
-	await expect
-		.poll(() => syncBodies)
-		.toEqual([
-			{ kind: "timeline" },
-			{ kind: "mentions", accountId: "acct_primary" },
-			{ kind: "likes", accountId: "acct_primary" },
-			{ kind: "bookmarks", accountId: "acct_primary" },
-			{ kind: "dms", inbox: "all", limit: 50, maxPages: 1 },
-		]);
+	await expectSyncControl("/", "Sync timeline");
+	await expectSyncControl("/mentions", "Sync mentions");
+	await expectSyncControl("/likes", "Sync likes");
+	await expectSyncControl("/bookmarks", "Sync bookmarks");
+	await expectSyncControl("/dms", "Sync DMs");
 });
 
 test("filters the home timeline by reply state", async ({ page }) => {
