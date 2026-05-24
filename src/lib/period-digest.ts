@@ -614,13 +614,10 @@ function formatFetchedStatus({
 	noun,
 }: {
 	fetched: number;
-	total?: number;
+	total: number;
 	noun: string;
 }) {
-	const count =
-		total === undefined
-			? String(fetched)
-			: `${String(Math.min(fetched, total))}/${String(total)}`;
+	const count = `${String(Math.min(fetched, total))}/${String(total)}`;
 	return `Fetched ${count} ${noun}`;
 }
 

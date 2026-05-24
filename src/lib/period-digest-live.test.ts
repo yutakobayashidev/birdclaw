@@ -193,6 +193,11 @@ describe("period digest live refresh", () => {
 				page: 2,
 				done: false,
 			});
+			(options as { onProgress?: (value: unknown) => void }).onProgress?.({
+				source: "xurl",
+				fetched: 5000,
+				done: true,
+			});
 			return { ok: true, source: "xurl", count: 200 };
 		});
 		syncMentionsMock.mockImplementation(async (options: unknown) => {
@@ -235,6 +240,11 @@ describe("period digest live refresh", () => {
 					type: "status",
 					label: "Fetched 200/5000 home tweets",
 					detail: "xurl · page 2",
+				},
+				{
+					type: "status",
+					label: "Fetched 5000/5000 home tweets",
+					detail: "xurl · done",
 				},
 				{
 					type: "status",
