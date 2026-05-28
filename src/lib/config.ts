@@ -4,6 +4,7 @@ import {
 	existsSync,
 	mkdirSync,
 	readFileSync,
+	writeFileSync,
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -80,6 +81,31 @@ export function getBirdclawConfig(): BirdclawConfig {
 		process.env.BIRDCLAW_CONFIG?.trim() || getBirdclawPaths().configPath;
 	cachedConfig = parseConfigFile(configPath);
 	return cachedConfig;
+}
+
+function getConfigPath() {
+	return process.env.BIRDCLAW_CONFIG?.trim() || getBirdclawPaths().configPath;
+}
+
+export function writeBirdclawConfig(config: BirdclawConfig) {
+	const configPath = getConfigPath();
+	mkdirSync(path.dirname(configPath), { recursive: true });
+	writeFileSync(configPath, `${JSON.stringify(config, null, "\t")}\n`, "utf8");
+	cachedConfig = config;
+	return configPath;
+}
+
+export function setActionsTransport(transport: ActionsTransport) {
+	const config = getBirdclawConfig();
+	const nextConfig: BirdclawConfig = {
+		...config,
+		actions: {
+			...config.actions,
+			transport,
+		},
+	};
+	const configPath = writeBirdclawConfig(nextConfig);
+	return { configPath, transport };
 }
 
 export function resolveMentionsDataSource(

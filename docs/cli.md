@@ -145,8 +145,8 @@ birdclaw debug transport
 
 ### `auth use <transport>`
 
-- set preferred transport for profile
-- allowed: `auto`, `xurl`, `bird`, `official`, `xweb`
+- set preferred moderation action transport
+- allowed: `auto`, `xurl`, `bird`
 
 ### `backup export`
 
