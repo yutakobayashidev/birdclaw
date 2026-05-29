@@ -142,6 +142,11 @@ birdclaw debug transport
 - show active account/profile
 - never print secrets
 
+### `auth use <transport>`
+
+- set preferred moderation action transport
+- allowed: `auto`, `xurl`, `bird`
+
 ### `backup export`
 
 - writes Git-friendly canonical JSONL text shards

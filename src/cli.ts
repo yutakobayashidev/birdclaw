@@ -44,6 +44,7 @@ import {
 	ensureBirdclawDirs,
 	getBirdclawPaths,
 	resolveMentionsDataSource,
+	setActionsTransport,
 } from "#/lib/config";
 import { closeDatabase } from "#/lib/db";
 import {
@@ -341,6 +342,16 @@ function resolveActionOptions(options: { transport?: string }) {
 	};
 }
 
+function parseActionsTransport(value: string | undefined) {
+	const normalized = value?.trim().toLowerCase();
+	if (normalized === "auto" || normalized === "bird" || normalized === "xurl") {
+		return normalized;
+	}
+	printError("transport must be auto, bird, or xurl");
+	process.exitCode = 1;
+	return undefined;
+}
+
 function parseDigestPeriod(value: string | undefined): PeriodDigestPreset {
 	const normalized = value?.trim().toLowerCase();
 	if (normalized === "yesterday") return "yesterday";
@@ -623,12 +634,25 @@ program
 		);
 	});
 
-program
-	.command("auth status")
+const authCommand = program
+	.command("auth")
+	.description("Manage live transport");
+
+authCommand
+	.command("status")
 	.description("Show transport status")
 	.action(async () => {
 		const meta = await getQueryEnvelope();
 		print(meta.transport, program.opts().json ?? false);
+	});
+
+authCommand
+	.command("use <transport>")
+	.description("Set preferred moderation action transport")
+	.action((transport: string) => {
+		const parsed = parseActionsTransport(transport);
+		if (!parsed) return;
+		print(setActionsTransport(parsed), program.opts().json ?? false);
 	});
 
 program

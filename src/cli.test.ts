@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const ensureBirdclawDirsMock = vi.fn();
 const getBirdclawPathsMock = vi.fn();
 const resolveMentionsDataSourceMock = vi.fn();
+const setActionsTransportMock = vi.fn();
 const getQueryEnvelopeMock = vi.fn();
 const findArchivesMock = vi.fn();
 const importArchiveMock = vi.fn();
@@ -85,6 +86,7 @@ vi.mock("#/lib/config", () => ({
 	getBirdclawPaths: () => getBirdclawPathsMock(),
 	resolveMentionsDataSource: (...args: unknown[]) =>
 		resolveMentionsDataSourceMock(...args),
+	setActionsTransport: (...args: unknown[]) => setActionsTransportMock(...args),
 }));
 
 vi.mock("#/lib/archive-finder", () => ({
@@ -272,6 +274,7 @@ describe("cli", () => {
 		ensureBirdclawDirsMock.mockReset();
 		getBirdclawPathsMock.mockReset();
 		resolveMentionsDataSourceMock.mockReset();
+		setActionsTransportMock.mockReset();
 		getQueryEnvelopeMock.mockReset();
 		findArchivesMock.mockReset();
 		importArchiveMock.mockReset();
@@ -345,6 +348,10 @@ describe("cli", () => {
 		resolveMentionsDataSourceMock.mockImplementation(
 			(mode?: string) => mode ?? "birdclaw",
 		);
+		setActionsTransportMock.mockImplementation((transport: string) => ({
+			configPath: "/tmp/.birdclaw/config.json",
+			transport,
+		}));
 		getQueryEnvelopeMock.mockResolvedValue({
 			stats: { home: 4, mentions: 2, dms: 4, needsReply: 2, inbox: 4 },
 			transport: { statusText: "local", installed: false },
@@ -568,6 +575,33 @@ describe("cli", () => {
 			}),
 		);
 		expect(exitMock).toHaveBeenCalledWith(0);
+	});
+
+	it("sets the preferred auth transport", async () => {
+		const { runCli } = await loadCli();
+
+		await runCli(["node", "birdclaw", "--json", "auth", "use", "xurl"]);
+
+		expect(setActionsTransportMock).toHaveBeenCalledWith("xurl");
+		expect(consoleLogMock).toHaveBeenCalledWith(
+			expect.stringContaining('"transport": "xurl"'),
+		);
+	});
+
+	it("rejects unsupported auth transports", async () => {
+		const consoleErrorMock = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const { runCli } = await loadCli();
+
+		await runCli(["node", "birdclaw", "auth", "use", "official"]);
+
+		expect(setActionsTransportMock).not.toHaveBeenCalled();
+		expect(process.exitCode).toBe(1);
+		expect(consoleErrorMock).toHaveBeenCalledWith(
+			JSON.stringify({ error: "transport must be auto, bird, or xurl" }),
+		);
+		consoleErrorMock.mockRestore();
 	});
 
 	it("dispatches link, media, and backup utility commands", async () => {
