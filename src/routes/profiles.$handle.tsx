@@ -53,9 +53,9 @@ export function ProfileRouteView({ handle }: { handle: string }) {
 
 	return (
 		<section className="flex min-h-screen flex-col">
-			<header className="border-b border-[var(--line)]">
+			<header className="border-b border-[var(--line)] bg-[var(--bg)]">
 				<div className="relative overflow-hidden px-4 py-6">
-					<div className="absolute inset-x-0 top-0 h-28 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--bg-active)_88%,var(--accent)_12%),var(--bg))]" />
+					<div className="absolute inset-x-0 top-0 h-44 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--bg-active)_88%,var(--accent)_12%),var(--bg))]" />
 					<div className="relative flex flex-col gap-4">
 						<div className="flex items-end justify-between gap-3 pt-12">
 							<div className="flex min-w-0 items-end gap-3">

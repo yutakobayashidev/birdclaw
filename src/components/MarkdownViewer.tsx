@@ -1,4 +1,9 @@
-import { Fragment, type ReactNode, useState } from "react";
+import {
+	Fragment,
+	type MouseEventHandler,
+	type ReactNode,
+	useState,
+} from "react";
 import { formatCompactNumber, formatShortTimestamp } from "#/lib/present";
 import type { PeriodDigestContext } from "#/lib/period-digest";
 import type { ProfileAnalysisContext } from "#/lib/profile-analysis";
@@ -64,8 +69,41 @@ function trimBullet(value: string) {
 	return value.replace(/^[-*]\s+/, "");
 }
 
+function skipRedundantSourceWords(value: string, cursor: number) {
+	const match = /^((?:\s+source\b)+)(?=\s*(?:[.,;:!?)]|$))/i.exec(
+		value.slice(cursor),
+	);
+	return match ? cursor + match[0].length : cursor;
+}
+
 function getTweetUrl(tweet: CitationTweet) {
 	return tweet.url || `https://x.com/${tweet.author}/status/${tweet.id}`;
+}
+
+function getFallbackTweetUrl(tweetId: string) {
+	return `https://x.com/i/status/${normalizeTweetReference(tweetId)}`;
+}
+
+function TweetSourceLink({
+	children,
+	href,
+	onClick,
+}: {
+	children: ReactNode;
+	href: string;
+	onClick?: MouseEventHandler<HTMLAnchorElement>;
+}) {
+	return (
+		<a
+			className="rounded-sm px-0.5 text-[var(--accent)] hover:bg-[var(--accent-soft)] hover:no-underline"
+			href={href}
+			onClick={onClick}
+			rel="noreferrer"
+			target="_blank"
+		>
+			{children}
+		</a>
+	);
 }
 
 function TweetPreviewToken({
@@ -89,18 +127,15 @@ function TweetPreviewToken({
 			onPointerEnter={() => setOpen(true)}
 			onPointerLeave={closePreview}
 		>
-			<a
-				className="rounded-sm px-0.5 text-[var(--accent)] hover:bg-[var(--accent-soft)] hover:no-underline"
+			<TweetSourceLink
 				href={getTweetUrl(tweet)}
 				onClick={(event) => {
 					closePreview();
 					event.currentTarget.blur();
 				}}
-				rel="noreferrer"
-				target="_blank"
 			>
 				{children}
-			</a>
+			</TweetSourceLink>
 			<span
 				aria-hidden={!open}
 				className={cx(
@@ -138,10 +173,19 @@ function TweetPreviewToken({
 	);
 }
 
-function additionalCitationLinks(
-	tweets: CitationTweet[],
-	key: string,
-) {
+function additionalDirectCitationLinks(references: string[], key: string) {
+	return references.slice(1).flatMap((reference, index) => [
+		index === 0 ? " " : ", ",
+		<TweetSourceLink
+			key={`${key}-direct-source-${String(index + 2)}`}
+			href={getFallbackTweetUrl(reference)}
+		>
+			{`source ${String(index + 2)}`}
+		</TweetSourceLink>,
+	]);
+}
+
+function additionalCitationLinks(tweets: CitationTweet[], key: string) {
 	return tweets.slice(1).flatMap((tweet, index) => [
 		index === 0 ? " " : ", ",
 		<TweetPreviewToken key={`${key}-source-${String(index + 2)}`} tweet={tweet}>
@@ -150,10 +194,7 @@ function additionalCitationLinks(
 	]);
 }
 
-function fallbackCitationLinks(
-	tweets: CitationTweet[],
-	key: string,
-) {
+function fallbackCitationLinks(tweets: CitationTweet[], key: string) {
 	return tweets.flatMap((tweet, index) => [
 		index === 0 ? "" : ", ",
 		<TweetPreviewToken
@@ -208,6 +249,32 @@ function linkTrailingCitationText(
 	return true;
 }
 
+function linkTrailingDirectCitationText(
+	nodes: ReactNode[],
+	references: string[],
+	key: string,
+) {
+	const reference = references[0];
+	if (!reference) return false;
+	const last = nodes.at(-1);
+	if (typeof last !== "string") return false;
+	const bounds = trailingReadableBounds(last);
+	if (!bounds) return false;
+
+	const before = last.slice(0, bounds.start);
+	const readable = last.slice(bounds.start, bounds.end);
+	const trailing = last.slice(bounds.end);
+	nodes[nodes.length - 1] = before;
+	nodes.push(
+		<TweetSourceLink key={key} href={getFallbackTweetUrl(reference)}>
+			{readable}
+		</TweetSourceLink>,
+		...additionalDirectCitationLinks(references, key),
+		/^\s*$/.test(trailing) ? "" : trailing,
+	);
+	return true;
+}
+
 function renderInline(text: string, lookup: InlineLookup) {
 	const pattern =
 		/(\[[^\]\n]+\]\s*\(https?:\/\/[^\s)]+\)|\*\*[^*]+\*\*|@[A-Za-z0-9_]{1,20}|\((?:\s*(?:tweet_[A-Za-z0-9_:-]+|\d{12,25})\s*,?)+\)|\btweet_[A-Za-z0-9_:-]+\b|\b\d{12,25}\b)/g;
@@ -217,17 +284,14 @@ function renderInline(text: string, lookup: InlineLookup) {
 
 	while ((match = pattern.exec(text))) {
 		const token = match[0];
+		const tokenKey = `${token}-${String(match.index)}`;
 		if (match.index > cursor) {
 			nodes.push(text.slice(cursor, match.index));
 		}
 		cursor = match.index + token.length;
 
 		if (token.startsWith("**") && token.endsWith("**")) {
-			nodes.push(
-				<strong key={`${token}-${String(match.index)}`}>
-					{token.slice(2, -2)}
-				</strong>,
-			);
+			nodes.push(<strong key={tokenKey}>{token.slice(2, -2)}</strong>);
 			continue;
 		}
 
@@ -239,7 +303,7 @@ function renderInline(text: string, lookup: InlineLookup) {
 			nodes.push(
 				href ? (
 					<a
-						key={`${token}-${String(match.index)}`}
+						key={tokenKey}
 						className={tweetLinkClass}
 						href={href}
 						rel="noreferrer"
@@ -258,15 +322,12 @@ function renderInline(text: string, lookup: InlineLookup) {
 			const profile = lookup.profilesByHandle.get(token.slice(1).toLowerCase());
 			nodes.push(
 				profile ? (
-					<ProfilePreview
-						key={`${token}-${String(match.index)}`}
-						profile={profile}
-					>
+					<ProfilePreview key={tokenKey} profile={profile}>
 						<span className={tweetMentionClass}>{token}</span>
 					</ProfilePreview>
 				) : (
 					<a
-						key={`${token}-${String(match.index)}`}
+						key={tokenKey}
 						className={tweetMentionClass}
 						href={`https://x.com/${token.slice(1)}`}
 						rel="noreferrer"
@@ -285,8 +346,8 @@ function renderInline(text: string, lookup: InlineLookup) {
 		);
 		const allReferencesResolved =
 			references.length > 0 && resolvedTweets.every(Boolean);
-		const tweets = resolvedTweets.filter(
-			(tweet): tweet is CitationTweet => Boolean(tweet),
+		const tweets = resolvedTweets.filter((tweet): tweet is CitationTweet =>
+			Boolean(tweet),
 		);
 		const tweet = tweets[0];
 		const isParenthesizedTweetRef =
@@ -296,6 +357,26 @@ function renderInline(text: string, lookup: InlineLookup) {
 			references.length > 1 &&
 			!allReferencesResolved
 		) {
+			if (references.every((reference) => /^\d{12,25}$/.test(reference))) {
+				const cursorAfterSourceWords = skipRedundantSourceWords(text, cursor);
+				if (linkTrailingDirectCitationText(nodes, references, tokenKey)) {
+					cursor = cursorAfterSourceWords;
+					continue;
+				}
+				nodes.push(
+					...references.flatMap((reference, index) => [
+						index === 0 ? "" : ", ",
+						<TweetSourceLink
+							key={`${tokenKey}-direct-${String(index)}`}
+							href={getFallbackTweetUrl(reference)}
+						>
+							{`source ${String(index + 1)}`}
+						</TweetSourceLink>,
+					]),
+				);
+				cursor = cursorAfterSourceWords;
+				continue;
+			}
 			nodes.push(token);
 			continue;
 		}
@@ -303,28 +384,45 @@ function renderInline(text: string, lookup: InlineLookup) {
 			tweet &&
 			isParenthesizedTweetRef &&
 			allReferencesResolved &&
-			linkTrailingCitationText(nodes, tweets, `${token}-${String(match.index)}`)
+			linkTrailingCitationText(nodes, tweets, tokenKey)
 		) {
+			cursor = skipRedundantSourceWords(text, cursor);
 			continue;
 		}
 		if (tweet && isParenthesizedTweetRef && allReferencesResolved) {
-			nodes.push(
-				...fallbackCitationLinks(tweets, `${token}-${String(match.index)}`),
-			);
+			nodes.push(...fallbackCitationLinks(tweets, tokenKey));
+			cursor = skipRedundantSourceWords(text, cursor);
 			continue;
 		}
-		nodes.push(
-			tweet ? (
-				<TweetPreviewToken
-					key={`${token}-${String(match.index)}`}
-					tweet={tweet}
-				>
+		if (tweet) {
+			nodes.push(
+				<TweetPreviewToken key={tokenKey} tweet={tweet}>
 					{isParenthesizedTweetRef ? "source" : token}
-				</TweetPreviewToken>
-			) : (
-				token
-			),
-		);
+				</TweetPreviewToken>,
+			);
+		} else if (
+			isParenthesizedTweetRef &&
+			references.length === 1 &&
+			/^\d{12,25}$/.test(references[0] ?? "")
+		) {
+			const cursorAfterSourceWords = skipRedundantSourceWords(text, cursor);
+			if (linkTrailingDirectCitationText(nodes, references, tokenKey)) {
+				cursor = cursorAfterSourceWords;
+				continue;
+			}
+			nodes.push(
+				<TweetSourceLink
+					key={`${tokenKey}-direct`}
+					href={getFallbackTweetUrl(references[0])}
+				>
+					source
+				</TweetSourceLink>,
+			);
+			cursor = cursorAfterSourceWords;
+			continue;
+		} else {
+			nodes.push(token);
+		}
 	}
 
 	if (cursor < text.length) {

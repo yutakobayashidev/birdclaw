@@ -202,12 +202,8 @@ describe("MarkdownViewer", () => {
 			/>,
 		);
 
-		expect(
-			screen.queryByText(/2055621934319030779/),
-		).not.toBeInTheDocument();
-		expect(
-			screen.queryByText(/2055858095759229148/),
-		).not.toBeInTheDocument();
+		expect(screen.queryByText(/2055621934319030779/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/2055858095759229148/)).not.toBeInTheDocument();
 		expect(
 			screen.getByRole("link", {
 				name: "Peter explicitly says he works at OpenAI and describes the OpenClaw team structure",
@@ -324,6 +320,93 @@ describe("MarkdownViewer", () => {
 			}),
 		).toBeInTheDocument();
 		expect(screen.queryByRole("link", { name: "source 2" })).toBeNull();
+	});
+
+	it("links unresolved numeric citations without leaking raw ids", () => {
+		render(
+			<MarkdownViewer
+				context={profileAnalysisContext}
+				markdown={
+					"People ask for product support inline source (2061001416454439313) source source."
+				}
+			/>,
+		);
+
+		expect(screen.queryByText(/2061001416454439313/)).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("link", {
+				name: "People ask for product support inline source",
+			}),
+		).toHaveAttribute("href", "https://x.com/i/status/2061001416454439313");
+		expect(screen.queryByText(" source source.")).toBeNull();
+	});
+
+	it("links standalone unresolved numeric citations", () => {
+		render(
+			<MarkdownViewer
+				context={profileAnalysisContext}
+				markdown={"**Evidence:** (2061001416454439313)"}
+			/>,
+		);
+
+		expect(screen.queryByText(/2061001416454439313/)).not.toBeInTheDocument();
+		expect(screen.getByRole("link", { name: "source" })).toHaveAttribute(
+			"href",
+			"https://x.com/i/status/2061001416454439313",
+		);
+	});
+
+	it("keeps real source-prefixed prose after citations", () => {
+		render(
+			<MarkdownViewer
+				context={context}
+				markdown={"Claim (tweet_2056286865875935400) source code is available."}
+			/>,
+		);
+
+		expect(screen.getByText(/source code is available/)).toBeInTheDocument();
+	});
+
+	it("links full claims that legitimately end in source", () => {
+		render(
+			<MarkdownViewer
+				context={context}
+				markdown={"The project is open source (tweet_2056286865875935400)."}
+			/>,
+		);
+
+		expect(
+			screen.getByRole("link", { name: "The project is open source" }),
+		).toHaveAttribute(
+			"href",
+			"https://x.com/ChainZenit/status/2056286865875935400",
+		);
+	});
+
+	it("links unresolved source-ending claims without collapsing the label", () => {
+		render(
+			<MarkdownViewer
+				context={profileAnalysisContext}
+				markdown={"The project is open source (2061001416454439313) source."}
+			/>,
+		);
+
+		expect(
+			screen.getByRole("link", { name: "The project is open source" }),
+		).toHaveAttribute("href", "https://x.com/i/status/2061001416454439313");
+		expect(screen.queryByText(" source.")).toBeNull();
+	});
+
+	it("does not link arbitrary standalone long numbers", () => {
+		render(
+			<MarkdownViewer
+				context={profileAnalysisContext}
+				markdown={"Customer 123456789012345 remains pending."}
+			/>,
+		);
+
+		expect(screen.getByText(/123456789012345/)).toBeInTheDocument();
+		expect(screen.queryByRole("link")).toBeNull();
 	});
 
 	it("renders all grouped citation links when no readable text precedes", () => {
