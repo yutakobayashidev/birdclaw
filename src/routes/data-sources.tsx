@@ -169,7 +169,9 @@ function CapabilityRow({
 }
 
 function DataSourcesRoute() {
-	const [snapshot, setSnapshot] = useState<LiveDataSourcesResponse | null>(null);
+	const [snapshot, setSnapshot] = useState<LiveDataSourcesResponse | null>(
+		null,
+	);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const sourcesByKind = useMemo(
