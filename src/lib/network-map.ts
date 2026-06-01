@@ -243,7 +243,9 @@ async function fillMissingGeocodes({
 		if (signal?.aborted) break;
 		const original = originalByKey.get(key);
 		if (!original) continue;
-		const result = await geocodeLocation(original, db, signal).catch(() => null);
+		const result = await geocodeLocation(original, db, signal).catch(
+			() => null,
+		);
 		if (result) geocoded += 1;
 	}
 	for (let index = 0; index < openCageKeys.length; index += 1) {

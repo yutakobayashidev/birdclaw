@@ -519,8 +519,10 @@ function MapboxPanel({
 							.map((leaf) => data.features[leaf.properties.featureIndex])
 							.filter((feature): feature is MapFeature => Boolean(feature))
 							.sort(compareClusterFeatures);
-						const [displayLongitude, displayLatitude] =
-							getClusterDisplayAnchor(leaves, fallbackCoordinates);
+						const [displayLongitude, displayLatitude] = getClusterDisplayAnchor(
+							leaves,
+							fallbackCoordinates,
+						);
 						return (
 							<Marker
 								key={`cluster-${String(item.properties.cluster_id)}`}
@@ -872,7 +874,10 @@ function NetworkMapRoute() {
 					setData(nextData);
 				})
 				.catch((cause: unknown) => {
-					if (controller.signal.aborted || mapRequestIdRef.current !== requestId) {
+					if (
+						controller.signal.aborted ||
+						mapRequestIdRef.current !== requestId
+					) {
 						return;
 					}
 					setError(cause instanceof Error ? cause.message : "Map unavailable");
