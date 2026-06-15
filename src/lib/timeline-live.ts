@@ -1,10 +1,13 @@
 import { Effect } from "effect";
 import type { Database } from "./sqlite";
 import { listHomeTimelineViaBirdEffect } from "./bird";
-import { databaseWriteEffect } from "./database-writer";
 import { getNativeDb } from "./db";
 import { runEffectPromise } from "./effect-runtime";
-import { readSyncCache, writeSyncCache } from "./sync-cache";
+import {
+	type LiveTransportAdapter,
+	normalizeCacheTtlMs,
+	runCachedLiveSyncEffect,
+} from "./live-sync-engine";
 import type {
 	XurlMediaItem,
 	XurlMentionUser,
@@ -37,13 +40,6 @@ export interface SyncHomeTimelineOptions {
 	cacheTtlMs?: number;
 	timeoutMs?: number;
 	onProgress?: (progress: HomeTimelineProgress) => void;
-}
-
-function parseCacheTtlMs(value?: number) {
-	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-		return DEFAULT_TIMELINE_CACHE_TTL_MS;
-	}
-	return Math.floor(value);
 }
 
 function assertLimit(limit: number) {
@@ -230,32 +226,6 @@ export function syncHomeTimelineEffect({
 				? "xurl"
 				: parsedMode;
 		const cacheKey = `timeline:${effectiveMode}:${accountId}:${following ? "following" : "for-you"}:${Number.isFinite(effectiveLimit) ? String(effectiveLimit) : "all"}:${Number.isFinite(parsedMaxPages) ? String(parsedMaxPages) : "all-pages"}:${parsedStartTime?.iso ?? "no-start"}`;
-		const ttlMs = parseCacheTtlMs(cacheTtlMs);
-		const cached = readSyncCache<XurlMentionsResponse>(cacheKey, db);
-		const cacheAgeMs = cached
-			? Date.now() - new Date(cached.updatedAt).getTime()
-			: Number.POSITIVE_INFINITY;
-
-		if (!refresh && cached && cacheAgeMs <= ttlMs) {
-			yield* Effect.sync(() =>
-				onProgress?.({
-					source: "cache",
-					fetched: cached.value.data.length,
-					total: Number.isFinite(effectiveLimit) ? effectiveLimit : undefined,
-					done: true,
-				}),
-			);
-			return {
-				ok: true,
-				source: "cache",
-				kind: "timeline",
-				accountId,
-				feed: following ? "following" : "for-you",
-				count: cached.value.data.length,
-				payload: cached.value,
-			} as const;
-		}
-
 		const fetchViaXurl = Effect.gen(function* () {
 			if (!following) {
 				return yield* Effect.fail(
@@ -317,28 +287,50 @@ export function syncHomeTimelineEffect({
 			maxResults: finiteFallbackLimit,
 			following,
 		});
-		let source: "bird" | "xurl";
-		let payload: XurlMentionsResponse;
-		if (effectiveMode === "xurl") {
-			payload = yield* fetchViaXurl;
-			source = "xurl";
-		} else if (effectiveMode === "auto") {
-			const fetched = yield* fetchViaXurl.pipe(
-				Effect.map((value) => ({ source: "xurl" as const, value })),
-				Effect.catchAll(() =>
-					fetchViaBird.pipe(
-						Effect.map((value) => ({ source: "bird" as const, value })),
-					),
+		const adapter = (
+			source: "bird" | "xurl",
+			fetch: Effect.Effect<XurlMentionsResponse, unknown>,
+		): LiveTransportAdapter<"bird" | "xurl", XurlMentionsResponse> => ({
+			source,
+			fetch: fetch.pipe(
+				Effect.mapError((error) =>
+					error instanceof Error ? error : new Error(String(error)),
 				),
+			),
+		});
+		const transports =
+			effectiveMode === "xurl"
+				? [adapter("xurl", fetchViaXurl)]
+				: effectiveMode === "bird"
+					? [adapter("bird", fetchViaBird)]
+					: [adapter("xurl", fetchViaXurl), adapter("bird", fetchViaBird)];
+		const syncResult = yield* runCachedLiveSyncEffect({
+			db,
+			cacheKey,
+			refresh,
+			cacheTtlMs: normalizeCacheTtlMs(
+				cacheTtlMs,
+				DEFAULT_TIMELINE_CACHE_TTL_MS,
+			),
+			transports,
+			persistLive: (writeDb, livePayload, liveSource) =>
+				mergeHomeTimelineIntoLocalStore(
+					writeDb,
+					accountId,
+					livePayload,
+					liveSource,
+				),
+		});
+		const { source, payload } = syncResult;
+		if (source === "cache") {
+			yield* Effect.sync(() =>
+				onProgress?.({
+					source: "cache",
+					fetched: payload.data.length,
+					total: Number.isFinite(effectiveLimit) ? effectiveLimit : undefined,
+					done: true,
+				}),
 			);
-			payload = fetched.value;
-			source = fetched.source;
-		} else {
-			payload = yield* listHomeTimelineViaBirdEffect({
-				maxResults: finiteFallbackLimit,
-				following,
-			});
-			source = "bird";
 		}
 		if (source === "bird") {
 			yield* Effect.sync(() =>
@@ -350,11 +342,6 @@ export function syncHomeTimelineEffect({
 				}),
 			);
 		}
-		yield* databaseWriteEffect((writeDb) => {
-			mergeHomeTimelineIntoLocalStore(writeDb, accountId, payload, source);
-			writeSyncCache(cacheKey, payload, writeDb);
-		});
-
 		return {
 			ok: true,
 			source,

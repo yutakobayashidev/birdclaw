@@ -1,10 +1,12 @@
 import { Effect } from "effect";
 import { searchTweetsViaBirdEffect } from "./bird";
 import type { Database } from "./sqlite";
-import { databaseWriteEffect } from "./database-writer";
 import { getNativeDb } from "./db";
 import { runEffectPromise } from "./effect-runtime";
-import { readSyncCache, writeSyncCache } from "./sync-cache";
+import {
+	normalizeCacheTtlMs,
+	runCachedLiveSyncEffect,
+} from "./live-sync-engine";
 import type { XurlMentionsResponse, XurlTweetsResponse } from "./types";
 import { ingestTweetPayload } from "./tweet-repository";
 import { searchRecentTweetsEffect } from "./xurl";
@@ -81,13 +83,6 @@ function normalizeTime(value: string | undefined, optionName: string) {
 		throw new Error(`${optionName} must be a valid date`);
 	}
 	return date.toISOString();
-}
-
-function normalizeCacheTtlMs(value: number | undefined) {
-	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-		return DEFAULT_CACHE_TTL_MS;
-	}
-	return Math.floor(value);
 }
 
 function resolveAccount(db: Database, accountId?: string) {
@@ -288,42 +283,44 @@ function runModeEffect(
 	return Effect.gen(function* () {
 		const db = getNativeDb();
 		const key = cacheKey({ ...options, mode });
-		const cached = yield* trySync(() =>
-			readSyncCache<XurlMentionsResponse>(key, db),
-		);
-		const ageMs = cached
-			? Date.now() - new Date(cached.updatedAt).getTime()
-			: Number.POSITIVE_INFINITY;
-		const payload =
-			!options.refresh && cached && ageMs <= options.cacheTtlMs
-				? cached.value
-				: yield* (
-						mode === "bird"
-							? fetchBirdSearchEffect(options).pipe(Effect.mapError(toError))
-							: fetchXurlSearchEffect(options)
-					).pipe(
+		const fetch =
+			mode === "bird"
+				? fetchBirdSearchEffect(options).pipe(Effect.mapError(toError))
+				: fetchXurlSearchEffect(options);
+		const syncResult = yield* runCachedLiveSyncEffect({
+			db,
+			cacheKey: key,
+			refresh: options.refresh,
+			cacheTtlMs: options.cacheTtlMs,
+			transports: [
+				{
+					source: mode,
+					fetch: fetch.pipe(
 						Effect.map((response) => limitResponse(response, options.limit)),
-					);
-		const tweetIds = yield* databaseWriteEffect((writeDb) => {
-			if (!cached || options.refresh || ageMs > options.cacheTtlMs) {
-				writeSyncCache(key, payload, writeDb);
-			}
-			return mergeTweetSearchIntoLocalStore(
-				writeDb,
-				options.accountId,
-				payload,
-				!options.refresh && cached && ageMs <= options.cacheTtlMs
-					? "cache"
-					: mode,
-			);
+					),
+				},
+			],
+			persistLive: (writeDb, payload, source) =>
+				mergeTweetSearchIntoLocalStore(
+					writeDb,
+					options.accountId,
+					payload,
+					source,
+				),
+			persistCached: (writeDb, payload) =>
+				mergeTweetSearchIntoLocalStore(
+					writeDb,
+					options.accountId,
+					payload,
+					"cache",
+				),
 		});
+		const { payload, source } = syncResult;
+		const tweetIds = syncResult.persisted ?? [];
 
 		return {
 			ok: true,
-			source:
-				!options.refresh && cached && ageMs <= options.cacheTtlMs
-					? "cache"
-					: mode,
+			source,
 			accountId: options.accountId,
 			query: options.query,
 			count: tweetIds.length,
@@ -399,7 +396,7 @@ export function syncTweetSearchEffect({
 		const normalizedUntil = yield* trySync(() =>
 			normalizeTime(until, "--until"),
 		);
-		const ttlMs = normalizeCacheTtlMs(cacheTtlMs);
+		const ttlMs = normalizeCacheTtlMs(cacheTtlMs, DEFAULT_CACHE_TTL_MS);
 		const db = getNativeDb();
 		const resolvedAccount = yield* trySync(() => resolveAccount(db, account));
 		const accountId = resolvedAccount.accountId;

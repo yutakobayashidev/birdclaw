@@ -4,10 +4,13 @@ import {
 	listBookmarkedTweetsViaBirdEffect,
 	listLikedTweetsViaBirdEffect,
 } from "./bird";
-import { databaseWriteEffect } from "./database-writer";
 import { getNativeDb } from "./db";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
-import { readSyncCache, writeSyncCache } from "./sync-cache";
+import {
+	type LiveTransportAdapter,
+	normalizeCacheTtlMs,
+	runCachedLiveSyncEffect,
+} from "./live-sync-engine";
 import type {
 	XurlMentionData,
 	XurlMentionsResponse,
@@ -49,13 +52,6 @@ function trySync<T>(try_: () => T) {
 		try: try_,
 		catch: toError,
 	});
-}
-
-function parseCacheTtlMs(value?: number) {
-	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-		return DEFAULT_COLLECTION_CACHE_TTL_MS;
-	}
-	return Math.floor(value);
 }
 
 function parseMaxPages(value?: number) {
@@ -383,28 +379,6 @@ export function syncTimelineCollectionEffect({
 		const resolvedAccount = yield* trySync(() => resolveAccount(db, account));
 		const cacheMaxPages = mode === "bird" ? parsedMaxPages : xurlMaxPages;
 		const cacheKey = `${kind}:${mode}:${resolvedAccount.accountId}:${String(limit)}:${all ? "all" : "single"}:${cacheMaxPages === null ? "all-pages" : String(cacheMaxPages)}${earlyStop ? ":early-stop" : ""}`;
-		const ttlMs = parseCacheTtlMs(cacheTtlMs);
-		const cached = yield* trySync(() =>
-			readSyncCache<XurlMentionsResponse>(cacheKey, db),
-		);
-		const cacheAgeMs = cached
-			? Date.now() - new Date(cached.updatedAt).getTime()
-			: Number.POSITIVE_INFINITY;
-
-		if (!refresh && cached && cacheAgeMs <= ttlMs) {
-			const saturatedAtPage = readSaturatedAtPage(cached.value);
-			return {
-				ok: true,
-				source: "cache",
-				kind,
-				accountId: resolvedAccount.accountId,
-				count: cached.value.data.length,
-				payload: cached.value,
-				...(saturatedAtPage === undefined
-					? {}
-					: { saturated_at_page: saturatedAtPage }),
-			};
-		}
 
 		if (shouldApplyEarlyStopCap) {
 			console.error(
@@ -412,60 +386,55 @@ export function syncTimelineCollectionEffect({
 			);
 		}
 
-		let source: "xurl" | "bird";
-		let payload: XurlMentionsResponse;
-		if (mode === "bird") {
-			payload = yield* fetchBirdCollectionEffect({
-				kind,
-				limit,
-				all,
-				maxPages: parsedMaxPages,
-			});
-			source = "bird";
-		} else {
-			const xurlPayload = yield* fetchXurlCollectionEffect({
-				db,
-				kind,
-				accountId: resolvedAccount.accountId,
-				username: resolvedAccount.username,
-				userId: resolvedAccount.externalUserId,
-				limit,
-				all,
-				maxPages: xurlMaxPages,
-				earlyStop,
-			}).pipe(
-				Effect.map((value) => ({ ok: true as const, value })),
-				Effect.catchAll((error) => {
-					if (mode === "xurl") {
-						return Effect.fail(error);
-					}
-					return Effect.succeed({ ok: false as const });
-				}),
-			);
-			if (xurlPayload.ok) {
-				payload = xurlPayload.value;
-				source = "xurl";
-			} else {
-				payload = yield* fetchBirdCollectionEffect({
-					kind,
-					limit,
-					all,
-					maxPages: parsedMaxPages,
-				});
-				source = "bird";
-			}
-		}
-
-		yield* databaseWriteEffect((writeDb) => {
-			mergeTimelineCollectionIntoLocalStore(
-				writeDb,
-				resolvedAccount.accountId,
-				kind,
-				payload,
-				source,
-			);
-			writeSyncCache(cacheKey, payload, writeDb);
+		const xurlFetch = fetchXurlCollectionEffect({
+			db,
+			kind,
+			accountId: resolvedAccount.accountId,
+			username: resolvedAccount.username,
+			userId: resolvedAccount.externalUserId,
+			limit,
+			all,
+			maxPages: xurlMaxPages,
+			earlyStop,
 		});
+		const birdFetch = fetchBirdCollectionEffect({
+			kind,
+			limit,
+			all,
+			maxPages: parsedMaxPages,
+		});
+		const adapter = (
+			source: "bird" | "xurl",
+			fetch: Effect.Effect<XurlMentionsResponse, unknown>,
+		): LiveTransportAdapter<"bird" | "xurl", XurlMentionsResponse> => ({
+			source,
+			fetch: fetch.pipe(Effect.mapError(toError)),
+		});
+		const transports =
+			mode === "bird"
+				? [adapter("bird", birdFetch)]
+				: mode === "xurl"
+					? [adapter("xurl", xurlFetch)]
+					: [adapter("xurl", xurlFetch), adapter("bird", birdFetch)];
+		const syncResult = yield* runCachedLiveSyncEffect({
+			db,
+			cacheKey,
+			refresh,
+			cacheTtlMs: normalizeCacheTtlMs(
+				cacheTtlMs,
+				DEFAULT_COLLECTION_CACHE_TTL_MS,
+			),
+			transports,
+			persistLive: (writeDb, livePayload, liveSource) =>
+				mergeTimelineCollectionIntoLocalStore(
+					writeDb,
+					resolvedAccount.accountId,
+					kind,
+					livePayload,
+					liveSource,
+				),
+		});
+		const { source, payload } = syncResult;
 		const saturatedAtPage = readSaturatedAtPage(payload);
 
 		return {
