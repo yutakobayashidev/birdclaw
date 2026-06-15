@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
+import { queryEnvelopeSchema } from "#/lib/api-contracts";
 import { maybeAutoUpdateBackupEffect } from "#/lib/backup";
 import {
 	jsonResponse,
@@ -18,9 +19,10 @@ export const Route = createFileRoute("/api/status")({
 						if (denied) return denied;
 
 						yield* maybeAutoUpdateBackupEffect();
-						return jsonResponse(
-							yield* getQueryEnvelopeEffect({ includeArchives: false }),
-						);
+						const envelope = yield* getQueryEnvelopeEffect({
+							includeArchives: false,
+						});
+						return jsonResponse(queryEnvelopeSchema.parse(envelope));
 					}),
 				),
 		},

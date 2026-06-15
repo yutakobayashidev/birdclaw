@@ -1,109 +1,17 @@
 import { Data, Effect } from "effect";
 import { z } from "zod";
+import {
+	actionResponseSchema,
+	queryEnvelopeSchema,
+	queryResponseSchema,
+	webSyncJobSchema,
+} from "./api-contracts";
 import { runEffectPromise } from "./effect-runtime";
-import type {
-	DmConversationItem,
-	DmMessageItem,
-	QueryEnvelope,
-	QueryResponse,
-	TimelineItem,
-} from "./types";
 import type {
 	WebSyncJobSnapshot,
 	WebSyncKind,
 	WebSyncOptions,
-	WebSyncResponse,
 } from "./web-sync";
-
-const jsonRecordSchema = z.object({}).passthrough();
-const resourceKindSchema = z.enum(["home", "mentions", "authored", "dms"]);
-const webSyncKindSchema = z.enum([
-	"timeline",
-	"mentions",
-	"likes",
-	"bookmarks",
-	"dms",
-]);
-
-const queryEnvelopeSchema = z
-	.object({
-		accounts: z.array(jsonRecordSchema),
-		archives: z.array(jsonRecordSchema),
-		transport: z
-			.object({
-				statusText: z.string(),
-			})
-			.passthrough(),
-		stats: z.object({
-			home: z.number(),
-			mentions: z.number(),
-			dms: z.number(),
-			needsReply: z.number(),
-			inbox: z.number(),
-		}),
-	})
-	.transform((value) => value as unknown as QueryEnvelope);
-
-const queryResponseSchema = z
-	.object({
-		resource: resourceKindSchema,
-		items: z.array(jsonRecordSchema),
-		selectedConversation: z
-			.object({
-				conversation: jsonRecordSchema,
-				messages: z.array(jsonRecordSchema),
-			})
-			.nullish(),
-	})
-	.transform(
-		(value) =>
-			({
-				...value,
-				items: value.items as unknown as Array<
-					TimelineItem | DmConversationItem
-				>,
-				selectedConversation: value.selectedConversation
-					? {
-							conversation: value.selectedConversation
-								.conversation as unknown as DmConversationItem,
-							messages: value.selectedConversation
-								.messages as unknown as DmMessageItem[],
-						}
-					: value.selectedConversation,
-			}) as QueryResponse,
-	);
-
-const webSyncResponseSchema = z
-	.object({
-		ok: z.boolean(),
-		kind: webSyncKindSchema,
-		accountId: z.string().optional(),
-		summary: z.string(),
-		steps: z.array(jsonRecordSchema),
-		startedAt: z.string().optional(),
-		finishedAt: z.string().optional(),
-		inProgress: z.boolean().optional(),
-		backup: z.unknown().optional(),
-		error: z.string().optional(),
-	})
-	.transform((value) => value as unknown as WebSyncResponse);
-
-const webSyncJobSchema = z
-	.object({
-		id: z.string(),
-		kind: webSyncKindSchema,
-		accountId: z.string().optional(),
-		status: z.enum(["running", "succeeded", "failed"]),
-		startedAt: z.string(),
-		finishedAt: z.string().optional(),
-		summary: z.string(),
-		inProgress: z.boolean(),
-		result: webSyncResponseSchema.optional(),
-		error: z.string().optional(),
-	})
-	.transform((value) => value as unknown as WebSyncJobSnapshot);
-
-const actionResponseSchema = jsonRecordSchema;
 const SYNC_POLL_INTERVAL_MS = 500;
 
 export class ApiFetchError extends Data.TaggedError("ApiFetchError")<{

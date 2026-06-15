@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
+import { queryResponseSchema } from "#/lib/api-contracts";
 import { maybeAutoUpdateBackupEffect } from "#/lib/backup";
 import {
 	jsonResponse,
@@ -78,35 +79,40 @@ export const Route = createFileRoute("/api/query")({
 
 						if (resource === "dms") {
 							return jsonResponse(
-								queryResource("dms", {
-									...baseFilters,
-									participant: url.searchParams.get("participant") ?? undefined,
-									minFollowers: parseOptionalNumber(
-										url.searchParams.get("minFollowers"),
-									),
-									maxFollowers: parseOptionalNumber(
-										url.searchParams.get("maxFollowers"),
-									),
-									minInfluenceScore: parseOptionalNumber(
-										url.searchParams.get("minInfluenceScore"),
-									),
-									maxInfluenceScore: parseOptionalNumber(
-										url.searchParams.get("maxInfluenceScore"),
-									),
-									sort: parseDmSort(url.searchParams.get("sort")),
-									inbox: parseDmInbox(url.searchParams.get("inbox")),
-									conversationId:
-										url.searchParams.get("conversationId") ?? undefined,
-								}),
+								queryResponseSchema.parse(
+									queryResource("dms", {
+										...baseFilters,
+										participant:
+											url.searchParams.get("participant") ?? undefined,
+										minFollowers: parseOptionalNumber(
+											url.searchParams.get("minFollowers"),
+										),
+										maxFollowers: parseOptionalNumber(
+											url.searchParams.get("maxFollowers"),
+										),
+										minInfluenceScore: parseOptionalNumber(
+											url.searchParams.get("minInfluenceScore"),
+										),
+										maxInfluenceScore: parseOptionalNumber(
+											url.searchParams.get("maxInfluenceScore"),
+										),
+										sort: parseDmSort(url.searchParams.get("sort")),
+										inbox: parseDmInbox(url.searchParams.get("inbox")),
+										conversationId:
+											url.searchParams.get("conversationId") ?? undefined,
+									}),
+								),
 							);
 						}
 
 						return jsonResponse(
-							queryResource(resource, {
-								...baseFilters,
-								resource,
-								untilId: url.searchParams.get("untilId") ?? undefined,
-							}),
+							queryResponseSchema.parse(
+								queryResource(resource, {
+									...baseFilters,
+									resource,
+									untilId: url.searchParams.get("untilId") ?? undefined,
+								}),
+							),
 						);
 					}),
 				),
