@@ -7,18 +7,20 @@ import {
 	recordDatabaseWriteStarted,
 } from "./database-metrics";
 
-let writeTail: Promise<void> = Promise.resolve();
+let writeTails = new Map<string | object, Promise<void>>();
 
 export function enqueueDatabaseWrite<T>(
 	write: (db: Database) => T,
 	providedDb?: Database,
 ): Promise<T> {
+	const db = providedDb ?? getNativeDb({ seedDemoData: false });
+	const writeIdentity = db.writeIdentity;
 	const queuedAt = performance.now();
 	recordDatabaseWriteQueued();
+	const writeTail = writeTails.get(writeIdentity) ?? Promise.resolve();
 	const pending = writeTail.then(() => {
 		recordDatabaseWriteStarted(performance.now() - queuedAt);
 		try {
-			const db = providedDb ?? getNativeDb({ seedDemoData: false });
 			const result = db.transaction(() => write(db))();
 			recordDatabaseWriteCompleted(false);
 			return result;
@@ -27,10 +29,16 @@ export function enqueueDatabaseWrite<T>(
 			throw error;
 		}
 	});
-	writeTail = pending.then(
+	const settled = pending.then(
 		() => undefined,
 		() => undefined,
 	);
+	writeTails.set(writeIdentity, settled);
+	void settled.then(() => {
+		if (writeTails.get(writeIdentity) === settled) {
+			writeTails.delete(writeIdentity);
+		}
+	});
 	return pending;
 }
 
@@ -46,9 +54,11 @@ export function databaseWriteEffect<T>(
 }
 
 export async function drainDatabaseWrites() {
-	await writeTail;
+	while (writeTails.size > 0) {
+		await Promise.all(writeTails.values());
+	}
 }
 
 export function resetDatabaseWriterForTests() {
-	writeTail = Promise.resolve();
+	writeTails = new Map();
 }

@@ -16,6 +16,7 @@ import { getBirdclawPaths } from "./config";
 import { getNativeDb } from "./db";
 import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
+import { getImportRepository } from "./import-repository";
 import {
 	ingestSourcesInBatchesEffect,
 	streamAssignedJsonArray,
@@ -703,43 +704,6 @@ function getArchiveFollowRow(wrapper: ArchiveRecord, key: ArchiveFollowKey) {
 		profileId: `profile_user_${externalUserId}`,
 		externalUserId,
 	};
-}
-
-function clearImportedData(db = getNativeDb()) {
-	db.exec(`
-    delete from ai_scores;
-    delete from tweet_actions;
-    delete from tweet_account_edges;
-    delete from tweet_collections;
-    delete from link_occurrences;
-    delete from url_expansions;
-    delete from dm_fts;
-    delete from tweets_fts;
-    delete from dm_messages;
-    delete from dm_conversations;
-    delete from tweets;
-    delete from profiles;
-    delete from accounts;
-  `);
-	clearAuthoredSyncCursors(db);
-}
-
-function clearAuthoredSyncCursors(db = getNativeDb(), accountId?: string) {
-	if (accountId) {
-		db.prepare("delete from sync_cache where cache_key = ?").run(
-			`authored:xurl:${accountId}:cursor`,
-		);
-		return;
-	}
-	db.prepare(
-		"delete from sync_cache where cache_key like 'authored:xurl:%:cursor'",
-	).run();
-}
-
-function clearMentionSyncState(db = getNativeDb()) {
-	db.prepare(
-		"delete from sync_cache where cache_key like 'mentions:sync:%'",
-	).run();
 }
 
 function importArchiveInternalEffect(
@@ -1849,6 +1813,7 @@ function importArchiveInternalEffect(
 		}
 
 		const db = getNativeDb();
+		const repository = getImportRepository(db);
 		const insertAccount = db.prepare(`
     insert into accounts (id, name, handle, external_user_id, transport, is_default, created_at)
     values (?, ?, ?, ?, ?, 1, ?)
@@ -2498,13 +2463,13 @@ function importArchiveInternalEffect(
 		}
 		yield* databaseWriteEffect(() => {
 			if (!selection) {
-				clearImportedData(db);
-				clearMentionSyncState(db);
+				repository.clearArchiveImport();
+				repository.clearMentionSyncState();
 			}
 
 			if (selection) {
 				if (includeTweets) {
-					clearAuthoredSyncCursors(db, "acct_primary");
+					repository.clearAuthoredSyncCursors("acct_primary");
 					demoteSelectedArchiveTweetsWithCollections.run(
 						"acct_primary",
 						"acct_primary",

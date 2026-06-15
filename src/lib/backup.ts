@@ -10,6 +10,7 @@ import { getBirdclawConfig } from "./config";
 import { getNativeDb } from "./db";
 import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
+import { getImportRepository } from "./import-repository";
 import {
 	collectIngestionSourcesEffect,
 	streamJsonLines,
@@ -1340,18 +1341,6 @@ function rowsForManifestPath(
 		.sort();
 }
 
-function insertRows(
-	db: Database,
-	sql: string,
-	rows: JsonRecord[],
-	keys: string[],
-) {
-	const statement = db.prepare(sql);
-	for (const row of rows) {
-		statement.run(...keys.map((key) => row[key] ?? null));
-	}
-}
-
 const JSON_URL_KEYS = new Set([
 	"url",
 	"expandedUrl",
@@ -1431,68 +1420,6 @@ function sanitizeImportedUrlExpansions(rows: JsonRecord[]) {
 	});
 }
 
-function readFtsIds(
-	db: Database,
-	tableName: "tweets_fts" | "dm_fts",
-	idColumn: "tweet_id" | "message_id",
-) {
-	const rows = db
-		.prepare(`select ${idColumn} as id from ${tableName}`)
-		.all() as { id: string }[];
-	return new Set(rows.map((row) => row.id));
-}
-
-function insertFtsRows(
-	db: Database,
-	tableName: "tweets_fts" | "dm_fts",
-	idColumn: "tweet_id" | "message_id",
-	rows: JsonRecord[],
-	idKey: string,
-	textKey: string,
-	existingIds = new Set<string>(),
-) {
-	const statement = db.prepare(
-		`insert into ${tableName} (${idColumn}, text) values (?, ?)`,
-	);
-	for (const row of rows) {
-		const id = row[idKey];
-		if (typeof id !== "string" || existingIds.has(id)) {
-			continue;
-		}
-		const text = row[textKey];
-		statement.run(id, typeof text === "string" ? text : "");
-		existingIds.add(id);
-	}
-}
-
-function clearBackupImportData(db: Database) {
-	db.exec(`
-    delete from follow_events;
-    delete from follow_edges;
-    delete from follow_snapshot_members;
-    delete from follow_snapshots;
-    delete from ai_scores;
-    delete from tweet_actions;
-    delete from tweet_account_edges;
-    delete from tweet_collections;
-    delete from link_occurrences;
-    delete from url_expansions;
-    delete from blocks;
-    delete from mutes;
-    delete from dm_fts;
-    delete from tweets_fts;
-    delete from dm_messages;
-    delete from dm_conversations;
-    delete from tweets;
-    delete from profile_bio_entities;
-    delete from profile_snapshots;
-    delete from profile_affiliations;
-    delete from profiles;
-    delete from accounts;
-    delete from sync_cache;
-  `);
-}
-
 export function importBackupEffect({
 	repoPath,
 	db: providedDb,
@@ -1542,21 +1469,26 @@ export function importBackupEffect({
 		const sanitizedUrlExpansions = yield* trySync(() =>
 			sanitizeImportedUrlExpansions(urlExpansions),
 		);
-
-		const fingerprint = yield* databaseWriteEffect(() => {
+		const fingerprint = yield* databaseWriteEffect((writeDb) => {
+			const repository = getImportRepository(writeDb);
 			if (mode === "replace") {
-				clearBackupImportData(db);
+				repository.clearBackupImport();
 			}
 			const tweetFtsIds =
 				mode === "replace"
 					? new Set<string>()
-					: readFtsIds(db, "tweets_fts", "tweet_id");
+					: repository.readFtsIds({
+							table: "tweets_fts",
+							idColumn: "tweet_id",
+						});
 			const dmFtsIds =
 				mode === "replace"
 					? new Set<string>()
-					: readFtsIds(db, "dm_fts", "message_id");
-			insertRows(
-				db,
+					: repository.readFtsIds({
+							table: "dm_fts",
+							idColumn: "message_id",
+						});
+			repository.insertRows(
 				`
       insert into accounts (id, name, handle, external_user_id, transport, is_default, created_at)
       values (?, ?, ?, ?, ?, ?, ?)
@@ -1579,8 +1511,7 @@ export function importBackupEffect({
 					"created_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into profile_snapshots (
         profile_id, snapshot_hash, observed_at, last_seen_at, source, handle,
@@ -1614,8 +1545,7 @@ export function importBackupEffect({
 					"raw_json",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into profile_bio_entities (
         profile_id, kind, value, source, is_active, first_seen_at, last_seen_at, raw_json
@@ -1641,8 +1571,7 @@ export function importBackupEffect({
 					"raw_json",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into profiles (
         id, handle, display_name, bio, followers_count, following_count,
@@ -1693,8 +1622,7 @@ export function importBackupEffect({
 					"created_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into profile_affiliations (
         subject_profile_id, organization_profile_id, organization_name,
@@ -1733,8 +1661,7 @@ export function importBackupEffect({
 					"updated_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into follow_snapshots (
         id, account_id, direction, source, status, page_count, result_count,
@@ -1768,8 +1695,7 @@ export function importBackupEffect({
 					"raw_meta_json",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into follow_snapshot_members (
         snapshot_id, profile_id, external_user_id, position
@@ -1781,8 +1707,7 @@ export function importBackupEffect({
 				followSnapshotMembers,
 				["snapshot_id", "profile_id", "external_user_id", "position"],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into follow_edges (
         account_id, direction, profile_id, external_user_id, source, current,
@@ -1817,8 +1742,7 @@ export function importBackupEffect({
 					"updated_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into follow_events (
         id, account_id, direction, profile_id, external_user_id, kind, event_at,
@@ -1845,8 +1769,7 @@ export function importBackupEffect({
 					"snapshot_id",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into tweets (
         id, account_id, author_profile_id, kind, text, created_at, is_replied,
@@ -1898,17 +1821,14 @@ export function importBackupEffect({
 					"quoted_tweet_id",
 				],
 			);
-			insertFtsRows(
-				db,
-				"tweets_fts",
-				"tweet_id",
-				sanitizedTweets,
-				"id",
-				"text",
-				tweetFtsIds,
-			);
-			insertRows(
-				db,
+			repository.insertFtsRows({
+				target: { table: "tweets_fts", idColumn: "tweet_id" },
+				rows: sanitizedTweets,
+				idKey: "id",
+				textKey: "text",
+				existingIds: tweetFtsIds,
+			});
+			repository.insertRows(
 				`
       insert into tweet_collections (
         account_id, tweet_id, kind, collected_at, source, raw_json, updated_at
@@ -1933,8 +1853,7 @@ export function importBackupEffect({
 					"updated_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into tweet_account_edges (
         account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
@@ -1964,8 +1883,7 @@ export function importBackupEffect({
 					"updated_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into dm_conversations (
         id, account_id, participant_profile_id, title, inbox_kind, last_message_at, unread_count, needs_reply
@@ -1995,8 +1913,7 @@ export function importBackupEffect({
 					"needs_reply",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into dm_messages (
         id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
@@ -2022,17 +1939,14 @@ export function importBackupEffect({
 					"media_count",
 				],
 			);
-			insertFtsRows(
-				db,
-				"dm_fts",
-				"message_id",
-				messages,
-				"id",
-				"text",
-				dmFtsIds,
-			);
-			insertRows(
-				db,
+			repository.insertFtsRows({
+				target: { table: "dm_fts", idColumn: "message_id" },
+				rows: messages,
+				idKey: "id",
+				textKey: "text",
+				existingIds: dmFtsIds,
+			});
+			repository.insertRows(
 				`
       insert into url_expansions (
         short_url, expanded_url, final_url, status, expanded_tweet_id,
@@ -2070,8 +1984,7 @@ export function importBackupEffect({
 					"updated_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into link_occurrences (
         source_kind, source_id, source_position, short_url, account_id,
@@ -2095,8 +2008,7 @@ export function importBackupEffect({
 					"created_at",
 				],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into blocks (account_id, profile_id, source, created_at)
       values (?, ?, ?, ?)
@@ -2107,8 +2019,7 @@ export function importBackupEffect({
 				blocks,
 				["account_id", "profile_id", "source", "created_at"],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into mutes (account_id, profile_id, source, created_at)
       values (?, ?, ?, ?)
@@ -2119,8 +2030,7 @@ export function importBackupEffect({
 				mutes,
 				["account_id", "profile_id", "source", "created_at"],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at)
       values (?, ?, ?, ?, ?, ?)
@@ -2134,8 +2044,7 @@ export function importBackupEffect({
 				actions,
 				["id", "account_id", "tweet_id", "kind", "body", "created_at"],
 			);
-			insertRows(
-				db,
+			repository.insertRows(
 				`
       insert into ai_scores (
         entity_kind, entity_id, model, score, summary, reasoning, updated_at
@@ -2158,7 +2067,7 @@ export function importBackupEffect({
 					"updated_at",
 				],
 			);
-			return getBackupDatabaseFingerprint(db);
+			return getBackupDatabaseFingerprint(writeDb);
 		}, db);
 
 		return {

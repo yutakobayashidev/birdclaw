@@ -13,6 +13,7 @@ import {
 	resetDatabaseRuntimeMetricsForTests,
 } from "./database-metrics";
 import { getNativeDb, resetDatabaseForTests } from "./db";
+import { NativeSqliteDatabase } from "./sqlite";
 
 let tempDir: string | undefined;
 
@@ -113,5 +114,31 @@ describe("database writer", () => {
 		expect(db.prepare("select name from writer_events").all()).toEqual([
 			{ name: "provided" },
 		]);
+	});
+
+	it("keeps independent queues for independent databases", async () => {
+		setupDatabase();
+		const secondDb = new NativeSqliteDatabase(":memory:");
+		secondDb.exec(
+			"create table writer_events (position integer primary key, name text)",
+		);
+
+		await Promise.all([
+			enqueueDatabaseWrite((db) => {
+				db.prepare(
+					"insert into writer_events (position, name) values (1, 'primary')",
+				).run();
+			}),
+			enqueueDatabaseWrite((db) => {
+				db.prepare(
+					"insert into writer_events (position, name) values (1, 'secondary')",
+				).run();
+			}, secondDb),
+		]);
+
+		expect(secondDb.prepare("select name from writer_events").get()).toEqual({
+			name: "secondary",
+		});
+		secondDb.close();
 	});
 });

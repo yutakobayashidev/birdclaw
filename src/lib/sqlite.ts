@@ -111,6 +111,7 @@ class NativeSqliteStatement {
 }
 
 export class NativeSqliteDatabase {
+	readonly writeIdentity: string | object;
 	private transactionDepth = 0;
 	private readonly db: DatabaseSync;
 
@@ -118,6 +119,7 @@ export class NativeSqliteDatabase {
 		path: string,
 		private readonly options: DatabaseOptions = {},
 	) {
+		this.writeIdentity = path === ":memory:" ? this : path;
 		this.db = new DatabaseSync(path, {
 			readOnly: options.readonly,
 			timeout: options.timeout ?? SQLITE_BUSY_TIMEOUT_MS,
