@@ -12,6 +12,10 @@
 - Retain Blocks, Inbox, Data Sources, and Rate Limits server state in TanStack Query across sidebar navigation and targeted refreshes.
 - Split compose, inbox, follow-graph, database, and backup CLI registration into domain-owned command modules.
 
+### Fixed
+
+- Preload hover-preview avatars after page load so citation and profile cards open with cached thumbnails.
+
 ## 0.8.2 - 2026-06-15
 
 ### Fixed
