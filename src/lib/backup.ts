@@ -8,6 +8,7 @@ import { Data, Effect } from "effect";
 import type { Database } from "./sqlite";
 import { getBirdclawConfig } from "./config";
 import { getNativeDb } from "./db";
+import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import {
 	collectIngestionSourcesEffect,
@@ -1542,22 +1543,21 @@ export function importBackupEffect({
 			sanitizeImportedUrlExpansions(urlExpansions),
 		);
 
-		const fingerprint = yield* trySync(() => {
-			db.transaction(() => {
-				if (mode === "replace") {
-					clearBackupImportData(db);
-				}
-				const tweetFtsIds =
-					mode === "replace"
-						? new Set<string>()
-						: readFtsIds(db, "tweets_fts", "tweet_id");
-				const dmFtsIds =
-					mode === "replace"
-						? new Set<string>()
-						: readFtsIds(db, "dm_fts", "message_id");
-				insertRows(
-					db,
-					`
+		const fingerprint = yield* databaseWriteEffect(() => {
+			if (mode === "replace") {
+				clearBackupImportData(db);
+			}
+			const tweetFtsIds =
+				mode === "replace"
+					? new Set<string>()
+					: readFtsIds(db, "tweets_fts", "tweet_id");
+			const dmFtsIds =
+				mode === "replace"
+					? new Set<string>()
+					: readFtsIds(db, "dm_fts", "message_id");
+			insertRows(
+				db,
+				`
       insert into accounts (id, name, handle, external_user_id, transport, is_default, created_at)
       values (?, ?, ?, ?, ?, ?, ?)
       on conflict(id) do update set
@@ -1568,20 +1568,20 @@ export function importBackupEffect({
         is_default = max(accounts.is_default, excluded.is_default),
         created_at = min(accounts.created_at, excluded.created_at)
       `,
-					accounts,
-					[
-						"id",
-						"name",
-						"handle",
-						"external_user_id",
-						"transport",
-						"is_default",
-						"created_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				accounts,
+				[
+					"id",
+					"name",
+					"handle",
+					"external_user_id",
+					"transport",
+					"is_default",
+					"created_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into profile_snapshots (
         profile_id, snapshot_hash, observed_at, last_seen_at, source, handle,
         display_name, bio, location, url, verified_type, followers_count,
@@ -1595,28 +1595,28 @@ export function importBackupEffect({
           else profile_snapshots.raw_json
         end
       `,
-					profileSnapshots,
-					[
-						"profile_id",
-						"snapshot_hash",
-						"observed_at",
-						"last_seen_at",
-						"source",
-						"handle",
-						"display_name",
-						"bio",
-						"location",
-						"url",
-						"verified_type",
-						"followers_count",
-						"following_count",
-						"affiliations_json",
-						"raw_json",
-					],
-				);
-				insertRows(
-					db,
-					`
+				profileSnapshots,
+				[
+					"profile_id",
+					"snapshot_hash",
+					"observed_at",
+					"last_seen_at",
+					"source",
+					"handle",
+					"display_name",
+					"bio",
+					"location",
+					"url",
+					"verified_type",
+					"followers_count",
+					"following_count",
+					"affiliations_json",
+					"raw_json",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into profile_bio_entities (
         profile_id, kind, value, source, is_active, first_seen_at, last_seen_at, raw_json
       ) values (?, ?, ?, coalesce(?, 'backup'), coalesce(?, 1), ?, ?, coalesce(?, '{}'))
@@ -1629,21 +1629,21 @@ export function importBackupEffect({
           else profile_bio_entities.raw_json
         end
       `,
-					profileBioEntities,
-					[
-						"profile_id",
-						"kind",
-						"value",
-						"source",
-						"is_active",
-						"first_seen_at",
-						"last_seen_at",
-						"raw_json",
-					],
-				);
-				insertRows(
-					db,
-					`
+				profileBioEntities,
+				[
+					"profile_id",
+					"kind",
+					"value",
+					"source",
+					"is_active",
+					"first_seen_at",
+					"last_seen_at",
+					"raw_json",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into profiles (
         id, handle, display_name, bio, followers_count, following_count,
         public_metrics_json, avatar_hue, avatar_url, location, url,
@@ -1674,28 +1674,28 @@ export function importBackupEffect({
         end,
         created_at = min(profiles.created_at, excluded.created_at)
       `,
-					profiles,
-					[
-						"id",
-						"handle",
-						"display_name",
-						"bio",
-						"followers_count",
-						"following_count",
-						"public_metrics_json",
-						"avatar_hue",
-						"avatar_url",
-						"location",
-						"url",
-						"verified_type",
-						"entities_json",
-						"raw_json",
-						"created_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				profiles,
+				[
+					"id",
+					"handle",
+					"display_name",
+					"bio",
+					"followers_count",
+					"following_count",
+					"public_metrics_json",
+					"avatar_hue",
+					"avatar_url",
+					"location",
+					"url",
+					"verified_type",
+					"entities_json",
+					"raw_json",
+					"created_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into profile_affiliations (
         subject_profile_id, organization_profile_id, organization_name,
         organization_handle, badge_url, url, label, source, is_active,
@@ -1716,26 +1716,26 @@ export function importBackupEffect({
         end,
         updated_at = excluded.updated_at
       `,
-					profileAffiliations,
-					[
-						"subject_profile_id",
-						"organization_profile_id",
-						"organization_name",
-						"organization_handle",
-						"badge_url",
-						"url",
-						"label",
-						"source",
-						"is_active",
-						"first_seen_at",
-						"last_seen_at",
-						"raw_json",
-						"updated_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				profileAffiliations,
+				[
+					"subject_profile_id",
+					"organization_profile_id",
+					"organization_name",
+					"organization_handle",
+					"badge_url",
+					"url",
+					"label",
+					"source",
+					"is_active",
+					"first_seen_at",
+					"last_seen_at",
+					"raw_json",
+					"updated_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into follow_snapshots (
         id, account_id, direction, source, status, page_count, result_count,
         started_at, completed_at, raw_meta_json
@@ -1754,23 +1754,23 @@ export function importBackupEffect({
           else follow_snapshots.raw_meta_json
         end
       `,
-					followSnapshots,
-					[
-						"id",
-						"account_id",
-						"direction",
-						"source",
-						"status",
-						"page_count",
-						"result_count",
-						"started_at",
-						"completed_at",
-						"raw_meta_json",
-					],
-				);
-				insertRows(
-					db,
-					`
+				followSnapshots,
+				[
+					"id",
+					"account_id",
+					"direction",
+					"source",
+					"status",
+					"page_count",
+					"result_count",
+					"started_at",
+					"completed_at",
+					"raw_meta_json",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into follow_snapshot_members (
         snapshot_id, profile_id, external_user_id, position
       ) values (?, ?, ?, coalesce(?, 0))
@@ -1778,12 +1778,12 @@ export function importBackupEffect({
         external_user_id = coalesce(nullif(excluded.external_user_id, ''), follow_snapshot_members.external_user_id),
         position = excluded.position
       `,
-					followSnapshotMembers,
-					["snapshot_id", "profile_id", "external_user_id", "position"],
-				);
-				insertRows(
-					db,
-					`
+				followSnapshotMembers,
+				["snapshot_id", "profile_id", "external_user_id", "position"],
+			);
+			insertRows(
+				db,
+				`
       insert into follow_edges (
         account_id, direction, profile_id, external_user_id, source, current,
         first_seen_at, last_seen_at, ended_at, updated_at
@@ -1803,23 +1803,23 @@ export function importBackupEffect({
         end,
         updated_at = max(follow_edges.updated_at, excluded.updated_at)
       `,
-					followEdges,
-					[
-						"account_id",
-						"direction",
-						"profile_id",
-						"external_user_id",
-						"source",
-						"current",
-						"first_seen_at",
-						"last_seen_at",
-						"ended_at",
-						"updated_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				followEdges,
+				[
+					"account_id",
+					"direction",
+					"profile_id",
+					"external_user_id",
+					"source",
+					"current",
+					"first_seen_at",
+					"last_seen_at",
+					"ended_at",
+					"updated_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into follow_events (
         id, account_id, direction, profile_id, external_user_id, kind, event_at,
         snapshot_id
@@ -1833,21 +1833,21 @@ export function importBackupEffect({
         event_at = coalesce(nullif(excluded.event_at, ''), follow_events.event_at),
         snapshot_id = coalesce(nullif(excluded.snapshot_id, ''), follow_events.snapshot_id)
       `,
-					followEvents,
-					[
-						"id",
-						"account_id",
-						"direction",
-						"profile_id",
-						"external_user_id",
-						"kind",
-						"event_at",
-						"snapshot_id",
-					],
-				);
-				insertRows(
-					db,
-					`
+				followEvents,
+				[
+					"id",
+					"account_id",
+					"direction",
+					"profile_id",
+					"external_user_id",
+					"kind",
+					"event_at",
+					"snapshot_id",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into tweets (
         id, account_id, author_profile_id, kind, text, created_at, is_replied,
         reply_to_id, like_count, media_count, bookmarked, liked, entities_json,
@@ -1879,37 +1879,37 @@ export function importBackupEffect({
         end,
         quoted_tweet_id = coalesce(excluded.quoted_tweet_id, tweets.quoted_tweet_id)
       `,
-					sanitizedTweets,
-					[
-						"id",
-						"account_id",
-						"author_profile_id",
-						"kind",
-						"text",
-						"created_at",
-						"is_replied",
-						"reply_to_id",
-						"like_count",
-						"media_count",
-						"bookmarked",
-						"liked",
-						"entities_json",
-						"media_json",
-						"quoted_tweet_id",
-					],
-				);
-				insertFtsRows(
-					db,
-					"tweets_fts",
-					"tweet_id",
-					sanitizedTweets,
+				sanitizedTweets,
+				[
 					"id",
+					"account_id",
+					"author_profile_id",
+					"kind",
 					"text",
-					tweetFtsIds,
-				);
-				insertRows(
-					db,
-					`
+					"created_at",
+					"is_replied",
+					"reply_to_id",
+					"like_count",
+					"media_count",
+					"bookmarked",
+					"liked",
+					"entities_json",
+					"media_json",
+					"quoted_tweet_id",
+				],
+			);
+			insertFtsRows(
+				db,
+				"tweets_fts",
+				"tweet_id",
+				sanitizedTweets,
+				"id",
+				"text",
+				tweetFtsIds,
+			);
+			insertRows(
+				db,
+				`
       insert into tweet_collections (
         account_id, tweet_id, kind, collected_at, source, raw_json, updated_at
       ) values (?, ?, ?, ?, ?, ?, ?)
@@ -1922,20 +1922,20 @@ export function importBackupEffect({
         end,
         updated_at = max(tweet_collections.updated_at, excluded.updated_at)
       `,
-					collections,
-					[
-						"account_id",
-						"tweet_id",
-						"kind",
-						"collected_at",
-						"source",
-						"raw_json",
-						"updated_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				collections,
+				[
+					"account_id",
+					"tweet_id",
+					"kind",
+					"collected_at",
+					"source",
+					"raw_json",
+					"updated_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into tweet_account_edges (
         account_id, tweet_id, kind, first_seen_at, last_seen_at, seen_count,
         source, raw_json, updated_at
@@ -1951,22 +1951,22 @@ export function importBackupEffect({
         end,
         updated_at = max(tweet_account_edges.updated_at, excluded.updated_at)
       `,
-					timelineEdges,
-					[
-						"account_id",
-						"tweet_id",
-						"kind",
-						"first_seen_at",
-						"last_seen_at",
-						"seen_count",
-						"source",
-						"raw_json",
-						"updated_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				timelineEdges,
+				[
+					"account_id",
+					"tweet_id",
+					"kind",
+					"first_seen_at",
+					"last_seen_at",
+					"seen_count",
+					"source",
+					"raw_json",
+					"updated_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into dm_conversations (
         id, account_id, participant_profile_id, title, inbox_kind, last_message_at, unread_count, needs_reply
       ) values (?, ?, ?, ?, coalesce(?, 'accepted'), ?, ?, ?)
@@ -1983,21 +1983,21 @@ export function importBackupEffect({
         unread_count = max(dm_conversations.unread_count, excluded.unread_count),
         needs_reply = max(dm_conversations.needs_reply, excluded.needs_reply)
       `,
-					conversations,
-					[
-						"id",
-						"account_id",
-						"participant_profile_id",
-						"title",
-						"inbox_kind",
-						"last_message_at",
-						"unread_count",
-						"needs_reply",
-					],
-				);
-				insertRows(
-					db,
-					`
+				conversations,
+				[
+					"id",
+					"account_id",
+					"participant_profile_id",
+					"title",
+					"inbox_kind",
+					"last_message_at",
+					"unread_count",
+					"needs_reply",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into dm_messages (
         id, conversation_id, sender_profile_id, text, created_at, direction, is_replied, media_count
       ) values (?, ?, ?, ?, ?, ?, ?, ?)
@@ -2010,30 +2010,30 @@ export function importBackupEffect({
         is_replied = max(dm_messages.is_replied, excluded.is_replied),
         media_count = max(dm_messages.media_count, excluded.media_count)
       `,
-					messages,
-					[
-						"id",
-						"conversation_id",
-						"sender_profile_id",
-						"text",
-						"created_at",
-						"direction",
-						"is_replied",
-						"media_count",
-					],
-				);
-				insertFtsRows(
-					db,
-					"dm_fts",
-					"message_id",
-					messages,
+				messages,
+				[
 					"id",
+					"conversation_id",
+					"sender_profile_id",
 					"text",
-					dmFtsIds,
-				);
-				insertRows(
-					db,
-					`
+					"created_at",
+					"direction",
+					"is_replied",
+					"media_count",
+				],
+			);
+			insertFtsRows(
+				db,
+				"dm_fts",
+				"message_id",
+				messages,
+				"id",
+				"text",
+				dmFtsIds,
+			);
+			insertRows(
+				db,
+				`
       insert into url_expansions (
         short_url, expanded_url, final_url, status, expanded_tweet_id,
         expanded_handle, title, description, image_url, site_name, error, source,
@@ -2053,26 +2053,26 @@ export function importBackupEffect({
         source = excluded.source,
         updated_at = excluded.updated_at
       `,
-					sanitizedUrlExpansions,
-					[
-						"short_url",
-						"expanded_url",
-						"final_url",
-						"status",
-						"expanded_tweet_id",
-						"expanded_handle",
-						"title",
-						"description",
-						"image_url",
-						"site_name",
-						"error",
-						"source",
-						"updated_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				sanitizedUrlExpansions,
+				[
+					"short_url",
+					"expanded_url",
+					"final_url",
+					"status",
+					"expanded_tweet_id",
+					"expanded_handle",
+					"title",
+					"description",
+					"image_url",
+					"site_name",
+					"error",
+					"source",
+					"updated_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into link_occurrences (
         source_kind, source_id, source_position, short_url, account_id,
         conversation_id, direction, created_at
@@ -2083,45 +2083,45 @@ export function importBackupEffect({
         direction = excluded.direction,
         created_at = excluded.created_at
       `,
-					linkOccurrences,
-					[
-						"source_kind",
-						"source_id",
-						"source_position",
-						"short_url",
-						"account_id",
-						"conversation_id",
-						"direction",
-						"created_at",
-					],
-				);
-				insertRows(
-					db,
-					`
+				linkOccurrences,
+				[
+					"source_kind",
+					"source_id",
+					"source_position",
+					"short_url",
+					"account_id",
+					"conversation_id",
+					"direction",
+					"created_at",
+				],
+			);
+			insertRows(
+				db,
+				`
       insert into blocks (account_id, profile_id, source, created_at)
       values (?, ?, ?, ?)
       on conflict(account_id, profile_id) do update set
         source = coalesce(nullif(excluded.source, ''), blocks.source),
         created_at = min(blocks.created_at, excluded.created_at)
       `,
-					blocks,
-					["account_id", "profile_id", "source", "created_at"],
-				);
-				insertRows(
-					db,
-					`
+				blocks,
+				["account_id", "profile_id", "source", "created_at"],
+			);
+			insertRows(
+				db,
+				`
       insert into mutes (account_id, profile_id, source, created_at)
       values (?, ?, ?, ?)
       on conflict(account_id, profile_id) do update set
         source = coalesce(nullif(excluded.source, ''), mutes.source),
         created_at = min(mutes.created_at, excluded.created_at)
       `,
-					mutes,
-					["account_id", "profile_id", "source", "created_at"],
-				);
-				insertRows(
-					db,
-					`
+				mutes,
+				["account_id", "profile_id", "source", "created_at"],
+			);
+			insertRows(
+				db,
+				`
       insert into tweet_actions (id, account_id, tweet_id, kind, body, created_at)
       values (?, ?, ?, ?, ?, ?)
       on conflict(id) do update set
@@ -2131,12 +2131,12 @@ export function importBackupEffect({
         body = coalesce(nullif(excluded.body, ''), tweet_actions.body),
         created_at = min(tweet_actions.created_at, excluded.created_at)
       `,
-					actions,
-					["id", "account_id", "tweet_id", "kind", "body", "created_at"],
-				);
-				insertRows(
-					db,
-					`
+				actions,
+				["id", "account_id", "tweet_id", "kind", "body", "created_at"],
+			);
+			insertRows(
+				db,
+				`
       insert into ai_scores (
         entity_kind, entity_id, model, score, summary, reasoning, updated_at
       ) values (?, ?, ?, ?, ?, ?, ?)
@@ -2147,20 +2147,19 @@ export function importBackupEffect({
         reasoning = coalesce(nullif(excluded.reasoning, ''), ai_scores.reasoning),
         updated_at = max(ai_scores.updated_at, excluded.updated_at)
       `,
-					scores,
-					[
-						"entity_kind",
-						"entity_id",
-						"model",
-						"score",
-						"summary",
-						"reasoning",
-						"updated_at",
-					],
-				);
-			})();
+				scores,
+				[
+					"entity_kind",
+					"entity_id",
+					"model",
+					"score",
+					"summary",
+					"reasoning",
+					"updated_at",
+				],
+			);
 			return getBackupDatabaseFingerprint(db);
-		});
+		}, db);
 
 		return {
 			ok: true,

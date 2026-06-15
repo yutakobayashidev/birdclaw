@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { Database } from "./sqlite";
 import { getNativeDb } from "./db";
+import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import {
 	getAccountHandle,
@@ -322,33 +323,30 @@ export function syncBlocksEffect(accountId: string) {
 				const page = yield* tryPromise(() =>
 					listBlockedUsers(sourceUserId, nextToken ?? undefined),
 				).pipe(Effect.mapError(toError));
-				yield* trySync(() => {
-					const mergeRemotePage = db.transaction(() => {
-						for (const user of page.items) {
-							const resolved = upsertProfileFromXUser(db, user);
-							remoteProfileIds.push(resolved.profile.id);
-							upsertRemoteBlock(
-								db,
-								resolvedAccountId,
-								resolved.profile.id,
-								blockedAt,
-							);
-						}
+				const pageProfileIds = yield* databaseWriteEffect((writeDb) => {
+					return page.items.map((user) => {
+						const resolved = upsertProfileFromXUser(writeDb, user);
+						upsertRemoteBlock(
+							writeDb,
+							resolvedAccountId,
+							resolved.profile.id,
+							blockedAt,
+						);
+						return resolved.profile.id;
 					});
-					mergeRemotePage();
-				});
+				}, db);
+				remoteProfileIds.push(...pageProfileIds);
 				nextToken = page.nextToken;
 				pageCount += 1;
 			} while (nextToken && pageCount < 20);
 
 			completed = !nextToken;
 			if (completed) {
-				yield* trySync(() => {
-					const pruneMergedBlocks = db.transaction(() => {
-						pruneRemoteBlocks(db, resolvedAccountId, remoteProfileIds);
-					});
-					pruneMergedBlocks();
-				});
+				yield* databaseWriteEffect(
+					(writeDb) =>
+						pruneRemoteBlocks(writeDb, resolvedAccountId, remoteProfileIds),
+					db,
+				);
 			}
 
 			return {

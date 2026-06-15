@@ -11,13 +11,14 @@ let writeTail: Promise<void> = Promise.resolve();
 
 export function enqueueDatabaseWrite<T>(
 	write: (db: Database) => T,
+	providedDb?: Database,
 ): Promise<T> {
 	const queuedAt = performance.now();
 	recordDatabaseWriteQueued();
 	const pending = writeTail.then(() => {
 		recordDatabaseWriteStarted(performance.now() - queuedAt);
 		try {
-			const db = getNativeDb({ seedDemoData: false });
+			const db = providedDb ?? getNativeDb({ seedDemoData: false });
 			const result = db.transaction(() => write(db))();
 			recordDatabaseWriteCompleted(false);
 			return result;
@@ -33,9 +34,12 @@ export function enqueueDatabaseWrite<T>(
 	return pending;
 }
 
-export function databaseWriteEffect<T>(write: (db: Database) => T) {
+export function databaseWriteEffect<T>(
+	write: (db: Database) => T,
+	providedDb?: Database,
+) {
 	return Effect.tryPromise({
-		try: () => enqueueDatabaseWrite(write),
+		try: () => enqueueDatabaseWrite(write, providedDb),
 		catch: (error) =>
 			error instanceof Error ? error : new Error(String(error)),
 	});

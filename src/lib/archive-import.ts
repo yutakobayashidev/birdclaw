@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import { Effect } from "effect";
 import { getBirdclawPaths } from "./config";
 import { getNativeDb } from "./db";
+import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import {
 	ingestSourcesInBatchesEffect,
@@ -2495,7 +2496,7 @@ function importArchiveInternalEffect(
 				onProgress({ kind: "write-progress", phase, processed, total });
 			}
 		}
-		db.transaction(() => {
+		yield* databaseWriteEffect(() => {
 			if (!selection) {
 				clearImportedData(db);
 				clearMentionSyncState(db);
@@ -2748,7 +2749,7 @@ function importArchiveInternalEffect(
 			} else if (includeFollowing) {
 				clearArchiveFollowRows("following");
 			}
-		})();
+		}, db);
 		onProgress({ kind: "done" });
 
 		return {

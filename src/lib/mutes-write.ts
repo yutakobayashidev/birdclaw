@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { runModerationAction } from "./actions-transport";
+import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import {
 	deleteModerationRow,
@@ -7,14 +8,6 @@ import {
 	resolveModerationTargetEffect,
 	writeModerationRow,
 } from "./moderation-write";
-
-function trySync<T>(try_: () => T) {
-	return Effect.try({
-		try: try_,
-		catch: (error) =>
-			error instanceof Error ? error : new Error(String(error)),
-	});
-}
 
 export function addMuteEffect(
 	accountId: string,
@@ -49,14 +42,16 @@ export function addMuteEffect(
 		}
 
 		const mutedAt = new Date().toISOString();
-		yield* trySync(() =>
-			writeModerationRow(
-				db,
-				"mutes",
-				resolvedAccountId,
-				resolved.profile.id,
-				mutedAt,
-			),
+		yield* databaseWriteEffect(
+			(writeDb) =>
+				writeModerationRow(
+					writeDb,
+					"mutes",
+					resolvedAccountId,
+					resolved.profile.id,
+					mutedAt,
+				),
+			db,
 		);
 
 		return {
@@ -88,14 +83,16 @@ export function recordMuteEffect(accountId: string, query: string) {
 			});
 
 		const mutedAt = new Date().toISOString();
-		yield* trySync(() =>
-			writeModerationRow(
-				db,
-				"mutes",
-				resolvedAccountId,
-				resolved.profile.id,
-				mutedAt,
-			),
+		yield* databaseWriteEffect(
+			(writeDb) =>
+				writeModerationRow(
+					writeDb,
+					"mutes",
+					resolvedAccountId,
+					resolved.profile.id,
+					mutedAt,
+				),
+			db,
 		);
 
 		return {
@@ -144,8 +141,15 @@ export function removeMuteEffect(
 			};
 		}
 
-		yield* trySync(() =>
-			deleteModerationRow(db, "mutes", resolvedAccountId, resolved.profile.id),
+		yield* databaseWriteEffect(
+			(writeDb) =>
+				deleteModerationRow(
+					writeDb,
+					"mutes",
+					resolvedAccountId,
+					resolved.profile.id,
+				),
+			db,
 		);
 
 		return {

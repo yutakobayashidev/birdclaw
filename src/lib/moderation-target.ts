@@ -2,6 +2,7 @@ import type { Database } from "./sqlite";
 import { Effect } from "effect";
 import { lookupProfileViaBird } from "./bird-actions";
 import { getNativeDb } from "./db";
+import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import type { ProfileRecord, XurlMentionUser } from "./types";
 import { getExternalUserId, upsertProfileFromXUser } from "./x-profile";
@@ -105,9 +106,10 @@ export function resolveLocalProfile(
 
 export function resolveProfileEffect(
 	query: string,
+	providedDb?: Database,
 ): Effect.Effect<ResolvedModerationProfile, unknown> {
 	return Effect.gen(function* () {
-		const db = yield* trySync(() => getNativeDb());
+		const db = providedDb ?? (yield* trySync(() => getNativeDb()));
 		const normalizedQuery = normalizeProfileQuery(query);
 		if (!normalizedQuery) {
 			return yield* Effect.fail(new Error("Missing profile handle or id"));
@@ -180,7 +182,10 @@ export function resolveProfileEffect(
 		}
 
 		if (local) {
-			return yield* trySync(() => upsertProfileFromXUser(db, user));
+			return yield* databaseWriteEffect(
+				(writeDb) => upsertProfileFromXUser(writeDb, user),
+				db,
+			);
 		}
 
 		const username = String(user.username ?? "").replace(/^@/, "");
@@ -189,11 +194,17 @@ export function resolveProfileEffect(
 				resolveLocalProfile(db, username),
 			);
 			if (localByHandle) {
-				return yield* trySync(() => upsertProfileFromXUser(db, user));
+				return yield* databaseWriteEffect(
+					(writeDb) => upsertProfileFromXUser(writeDb, user),
+					db,
+				);
 			}
 		}
 
-		return yield* trySync(() => upsertProfileFromXUser(db, user));
+		return yield* databaseWriteEffect(
+			(writeDb) => upsertProfileFromXUser(writeDb, user),
+			db,
+		);
 	});
 }
 

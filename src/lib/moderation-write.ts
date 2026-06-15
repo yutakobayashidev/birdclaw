@@ -53,7 +53,7 @@ export function resolveModerationTargetEffect({
 			return yield* Effect.fail(new Error(selfActionError));
 		}
 
-		const resolved = yield* resolveProfileEffect(query);
+		const resolved = yield* resolveProfileEffect(query, db);
 		const account = yield* trySync(
 			() =>
 				db

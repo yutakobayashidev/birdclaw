@@ -33,6 +33,7 @@ function setupDatabase() {
 	db.exec(
 		"create table writer_events (position integer primary key, name text)",
 	);
+	return db;
 }
 
 describe("database writer", () => {
@@ -95,5 +96,22 @@ describe("database writer", () => {
 			failed: 1,
 			queued: 0,
 		});
+	});
+
+	it("can serialize writes against an explicitly provided database", async () => {
+		const db = setupDatabase();
+
+		await enqueueDatabaseWrite((writeDb) => {
+			expect(writeDb).toBe(db);
+			writeDb
+				.prepare(
+					"insert into writer_events (position, name) values (1, 'provided')",
+				)
+				.run();
+		}, db);
+
+		expect(db.prepare("select name from writer_events").all()).toEqual([
+			{ name: "provided" },
+		]);
 	});
 });

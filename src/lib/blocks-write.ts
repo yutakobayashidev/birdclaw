@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { runModerationAction } from "./actions-transport";
+import { databaseWriteEffect } from "./database-writer";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import {
 	deleteModerationRow,
@@ -7,14 +8,6 @@ import {
 	resolveModerationTargetEffect,
 	writeModerationRow,
 } from "./moderation-write";
-
-function trySync<T>(try_: () => T) {
-	return Effect.try({
-		try: try_,
-		catch: (error) =>
-			error instanceof Error ? error : new Error(String(error)),
-	});
-}
 
 export function addBlockEffect(
 	accountId: string,
@@ -49,14 +42,16 @@ export function addBlockEffect(
 		}
 
 		const blockedAt = new Date().toISOString();
-		yield* trySync(() =>
-			writeModerationRow(
-				db,
-				"blocks",
-				resolvedAccountId,
-				resolved.profile.id,
-				blockedAt,
-			),
+		yield* databaseWriteEffect(
+			(writeDb) =>
+				writeModerationRow(
+					writeDb,
+					"blocks",
+					resolvedAccountId,
+					resolved.profile.id,
+					blockedAt,
+				),
+			db,
 		);
 
 		return {
@@ -88,14 +83,16 @@ export function recordBlockEffect(accountId: string, query: string) {
 			});
 
 		const blockedAt = new Date().toISOString();
-		yield* trySync(() =>
-			writeModerationRow(
-				db,
-				"blocks",
-				resolvedAccountId,
-				resolved.profile.id,
-				blockedAt,
-			),
+		yield* databaseWriteEffect(
+			(writeDb) =>
+				writeModerationRow(
+					writeDb,
+					"blocks",
+					resolvedAccountId,
+					resolved.profile.id,
+					blockedAt,
+				),
+			db,
 		);
 
 		return {
@@ -144,8 +141,15 @@ export function removeBlockEffect(
 			};
 		}
 
-		yield* trySync(() =>
-			deleteModerationRow(db, "blocks", resolvedAccountId, resolved.profile.id),
+		yield* databaseWriteEffect(
+			(writeDb) =>
+				deleteModerationRow(
+					writeDb,
+					"blocks",
+					resolvedAccountId,
+					resolved.profile.id,
+				),
+			db,
 		);
 
 		return {
