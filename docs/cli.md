@@ -190,7 +190,7 @@ Read commands pull + merge only when the last backup check is stale. Data-changi
 
 ### local `bird` command
 
-Live local likes, bookmarks, DMs, and moderation verification use `bird` on PATH
+Live local timeline, mentions, likes, bookmarks, profiles, and tweet/reply writes use `bird` on PATH
 by default. Override it with `BIRDCLAW_BIRD_COMMAND` or:
 
 ```json
@@ -625,7 +625,7 @@ Flags:
 - `--refresh`
 - `--cache-ttl <seconds>`
 
-`--mode bird` is the default and the only mode that can sync message requests. `--mode xurl` reads recent OAuth2 `/2/dm_events` as accepted conversations; `--mode auto` tries xurl first for accepted DMs and falls back to bird.
+`--mode bird` and `--mode auto` currently fail fast for DMs because the current `bird` CLI does not expose DM reads or message-request mutations. Use `--mode xurl` to read recent OAuth2 `/2/dm_events` as accepted conversations.
 
 ### `inbox`
 

@@ -31,6 +31,9 @@ const mocks = vi.hoisted(() => ({
 	replyViaXurl: vi.fn(),
 	dmViaXurl: vi.fn(),
 	lookupAuthenticatedUser: vi.fn(),
+	postTweetViaBird: vi.fn(),
+	replyToTweetViaBird: vi.fn(),
+	getAuthenticatedBirdAccount: vi.fn(),
 }));
 
 vi.mock("./archive-finder", async () => {
@@ -83,6 +86,32 @@ vi.mock("./xurl", async () => {
 			}),
 		lookupAuthenticatedUser: mocks.lookupAuthenticatedUser,
 		lookupAuthenticatedUserFresh: mocks.lookupAuthenticatedUser,
+	};
+});
+
+vi.mock("./bird", async () => {
+	const { Effect } = await import("effect");
+	const toError = (error: unknown) =>
+		error instanceof Error ? error : new Error(String(error));
+	return {
+		postTweetViaBird: mocks.postTweetViaBird,
+		postTweetViaBirdEffect: (text: string) =>
+			Effect.tryPromise({
+				try: () => mocks.postTweetViaBird(text),
+				catch: toError,
+			}),
+		replyToTweetViaBird: mocks.replyToTweetViaBird,
+		replyToTweetViaBirdEffect: (tweetId: string, text: string) =>
+			Effect.tryPromise({
+				try: () => mocks.replyToTweetViaBird(tweetId, text),
+				catch: toError,
+			}),
+		getAuthenticatedBirdAccount: mocks.getAuthenticatedBirdAccount,
+		getAuthenticatedBirdAccountEffect: () =>
+			Effect.tryPromise({
+				try: () => mocks.getAuthenticatedBirdAccount(),
+				catch: toError,
+			}),
 	};
 });
 
@@ -170,6 +199,9 @@ afterEach(() => {
 	mocks.replyViaXurl.mockReset();
 	mocks.dmViaXurl.mockReset();
 	mocks.lookupAuthenticatedUser.mockReset();
+	mocks.postTweetViaBird.mockReset();
+	mocks.replyToTweetViaBird.mockReset();
+	mocks.getAuthenticatedBirdAccount.mockReset();
 	delete process.env.BIRDCLAW_DISABLE_LIVE_WRITES;
 	delete process.env.BIRDCLAW_E2E;
 	delete process.env.BIRDCLAW_E2E_FAKE_LIVE_WRITES;
@@ -201,6 +233,22 @@ describe("birdclaw queries", () => {
 		mocks.replyViaXurl.mockResolvedValue({ ok: true, output: "replied" });
 		mocks.dmViaXurl.mockResolvedValue({ ok: true, output: "sent" });
 		mocks.lookupAuthenticatedUser.mockResolvedValue({
+			id: "25401953",
+			username: "steipete",
+		});
+		mocks.postTweetViaBird.mockResolvedValue({
+			ok: true,
+			output: "posted",
+			tweetId: "bird_post",
+			transport: "bird",
+		});
+		mocks.replyToTweetViaBird.mockResolvedValue({
+			ok: true,
+			output: "replied",
+			tweetId: "bird_reply",
+			transport: "bird",
+		});
+		mocks.getAuthenticatedBirdAccount.mockResolvedValue({
 			id: "25401953",
 			username: "steipete",
 		});
@@ -1437,7 +1485,12 @@ describe("birdclaw queries", () => {
 			.get(result.tweetId) as { text: string; kind: string } | undefined;
 
 		expect(result.ok).toBe(true);
-		expect(result.transport).toEqual({ ok: true, output: "posted" });
+		expect(result.transport).toEqual({
+			ok: true,
+			output: "posted",
+			tweetId: "bird_post",
+			transport: "bird",
+		});
 		expect(post).toEqual({
 			text: "Fresh local-first post",
 			kind: "home",
@@ -1446,7 +1499,10 @@ describe("birdclaw queries", () => {
 			kind: "post",
 			body: "Fresh local-first post",
 		});
-		expect(mocks.postViaXurl).toHaveBeenCalledWith("Fresh local-first post");
+		expect(mocks.postTweetViaBird).toHaveBeenCalledWith(
+			"Fresh local-first post",
+		);
+		expect(mocks.postViaXurl).not.toHaveBeenCalled();
 	});
 
 	it("exposes local compose writes as lazy Effect programs", async () => {
@@ -1459,10 +1515,12 @@ describe("birdclaw queries", () => {
 			"tweet_004",
 			"Effect reply",
 		);
-		const dmEffect = createDmReplyEffect("dm_003", "Effect DM");
+		const dmEffect = createDmReplyEffect("dm_003", "Effect DM", {
+			transport: "xurl",
+		});
 
-		expect(mocks.postViaXurl).not.toHaveBeenCalled();
-		expect(mocks.replyViaXurl).not.toHaveBeenCalled();
+		expect(mocks.postTweetViaBird).not.toHaveBeenCalled();
+		expect(mocks.replyToTweetViaBird).not.toHaveBeenCalled();
 		expect(mocks.dmViaXurl).not.toHaveBeenCalled();
 		expect(
 			db
@@ -1481,8 +1539,8 @@ describe("birdclaw queries", () => {
 		await expect(Effect.runPromise(dmEffect)).resolves.toMatchObject({
 			ok: true,
 		});
-		expect(mocks.postViaXurl).toHaveBeenCalledWith("Effect post");
-		expect(mocks.replyViaXurl).toHaveBeenCalledWith(
+		expect(mocks.postTweetViaBird).toHaveBeenCalledWith("Effect post");
+		expect(mocks.replyToTweetViaBird).toHaveBeenCalledWith(
 			"tweet_004",
 			"Effect reply",
 		);
@@ -1505,8 +1563,8 @@ describe("birdclaw queries", () => {
 	it("does not persist tweet writes when transport fails", async () => {
 		setupTempHome();
 		const db = getNativeDb();
-		mocks.postViaXurl.mockRejectedValueOnce(new Error("post failed"));
-		mocks.replyViaXurl.mockRejectedValueOnce(new Error("reply failed"));
+		mocks.postTweetViaBird.mockRejectedValueOnce(new Error("post failed"));
+		mocks.replyToTweetViaBird.mockRejectedValueOnce(new Error("reply failed"));
 
 		await expect(createPost("acct_primary", "do not keep")).rejects.toThrow(
 			"post failed",
@@ -1514,11 +1572,11 @@ describe("birdclaw queries", () => {
 		await expect(
 			createTweetReply("acct_primary", "tweet_004", "do not reply"),
 		).rejects.toThrow("reply failed");
-		mocks.postViaXurl.mockResolvedValueOnce({
+		mocks.postTweetViaBird.mockResolvedValueOnce({
 			ok: false,
 			output: "post denied",
 		});
-		mocks.replyViaXurl.mockResolvedValueOnce({
+		mocks.replyToTweetViaBird.mockResolvedValueOnce({
 			ok: false,
 			output: "reply denied",
 		});
@@ -1547,10 +1605,10 @@ describe("birdclaw queries", () => {
 		).toEqual({ is_replied: 0 });
 	});
 
-	it("does not call xurl whoami when live writes are disabled", async () => {
+	it("does not call bird whoami when live writes are disabled", async () => {
 		setupTempHome();
 		process.env.BIRDCLAW_DISABLE_LIVE_WRITES = "1";
-		mocks.postViaXurl.mockResolvedValueOnce({
+		mocks.postTweetViaBird.mockResolvedValueOnce({
 			ok: false,
 			output: "live writes disabled",
 		});
@@ -1559,7 +1617,7 @@ describe("birdclaw queries", () => {
 			"live writes disabled",
 		);
 
-		expect(mocks.lookupAuthenticatedUser).not.toHaveBeenCalled();
+		expect(mocks.getAuthenticatedBirdAccount).not.toHaveBeenCalled();
 		expect(
 			getNativeDb()
 				.prepare("select count(*) as count from tweets where text = ?")
@@ -1579,8 +1637,8 @@ describe("birdclaw queries", () => {
 			createTweetReply("acct_primary", "tweet_004", "do not publish reply"),
 		).rejects.toThrow("tweet_actions");
 
-		expect(mocks.postViaXurl).not.toHaveBeenCalled();
-		expect(mocks.replyViaXurl).not.toHaveBeenCalled();
+		expect(mocks.postTweetViaBird).not.toHaveBeenCalled();
+		expect(mocks.replyToTweetViaBird).not.toHaveBeenCalled();
 		expect(
 			db
 				.prepare("select count(*) as count from tweets where text like ?")
@@ -1614,7 +1672,7 @@ describe("birdclaw queries", () => {
 			reply_to_id: "tweet_004",
 			is_replied: 1,
 		});
-		expect(mocks.replyViaXurl).toHaveBeenCalledWith(
+		expect(mocks.replyToTweetViaBird).toHaveBeenCalledWith(
 			"tweet_004",
 			"Sync deserves an engine when replay matters.",
 		);
@@ -1623,7 +1681,9 @@ describe("birdclaw queries", () => {
 	it("creates dm replies and clears reply pressure on the thread", async () => {
 		setupTempHome();
 
-		const result = await createDmReply("dm_003", "Send it over.");
+		const result = await createDmReply("dm_003", "Send it over.", {
+			transport: "xurl",
+		});
 		const db = getNativeDb();
 		const conversation = db
 			.prepare(
@@ -1660,7 +1720,9 @@ describe("birdclaw queries", () => {
 			"update dm_conversations set last_message_at = ?, unread_count = 2, needs_reply = 1 where id = 'dm_003'",
 		).run(futureAt);
 
-		await createDmReply("dm_003", "Reply to future state.");
+		await createDmReply("dm_003", "Reply to future state.", {
+			transport: "xurl",
+		});
 
 		expect(
 			db
@@ -1697,7 +1759,9 @@ describe("birdclaw queries", () => {
 			return { ok: true, output: "sent" };
 		});
 
-		const result = await createDmReply("dm_003", "Reply after sync.");
+		const result = await createDmReply("dm_003", "Reply after sync.", {
+			transport: "xurl",
+		});
 		const conversation = db
 			.prepare(
 				"select last_message_at, needs_reply, unread_count from dm_conversations where id = ?",
@@ -1721,19 +1785,24 @@ describe("birdclaw queries", () => {
 	it("does not persist dm replies when transport fails", async () => {
 		setupTempHome();
 		const db = getNativeDb();
-		mocks.dmViaXurl.mockRejectedValueOnce(new Error("dm failed"));
 
 		await expect(createDmReply("dm_003", "do not dm")).rejects.toThrow(
-			"dm failed",
+			"bird CLI does not support direct message sends",
 		);
+		expect(mocks.dmViaXurl).not.toHaveBeenCalled();
+
+		mocks.dmViaXurl.mockRejectedValueOnce(new Error("dm failed"));
+		await expect(
+			createDmReply("dm_003", "do not dm", { transport: "xurl" }),
+		).rejects.toThrow("dm failed");
 		mocks.dmViaXurl.mockResolvedValueOnce({
 			ok: false,
 			output: "dm denied",
 		});
 
-		await expect(createDmReply("dm_003", "do not dm false")).rejects.toThrow(
-			"dm denied",
-		);
+		await expect(
+			createDmReply("dm_003", "do not dm false", { transport: "xurl" }),
+		).rejects.toThrow("dm denied");
 
 		expect(
 			db

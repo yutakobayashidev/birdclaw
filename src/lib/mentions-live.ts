@@ -661,7 +661,7 @@ export function syncMentionsEffect({
 	return Effect.gen(function* () {
 		const parsedMode = yield* trySync(() => parseSyncMode(mode));
 		const primaryMode: MentionLiveSource =
-			parsedMode === "auto" ? "xurl" : parsedMode;
+			parsedMode === "auto" ? "bird" : parsedMode;
 		const explicitSinceId = sinceId?.trim() || undefined;
 		const explicitStartTime = startTime?.trim() || undefined;
 		if (primaryMode === "bird" && (explicitSinceId || explicitStartTime)) {
@@ -815,15 +815,11 @@ export function syncMentionsEffect({
 		}
 
 		let source: MentionLiveSource = primaryMode;
-		const canFallbackToBird =
-			primaryMode === "xurl" &&
-			parsedMode === "auto" &&
-			!explicitSinceId &&
-			!explicitStartTime &&
-			!startPaginationToken;
 		const payload =
 			primaryMode === "bird"
-				? yield* fetchMentionsViaBirdEffect({ limit })
+				? yield* verifyBirdAccountMatchesEffect(resolvedAccount).pipe(
+						Effect.flatMap(() => fetchMentionsViaBirdEffect({ limit })),
+					)
 				: yield* fetchMentionsViaXurlEffect({
 						resolvedAccount,
 						limit,
@@ -833,15 +829,7 @@ export function syncMentionsEffect({
 						startPaginationToken,
 						startTime: resolvedStartTime,
 						onProgress,
-					}).pipe(
-						Effect.catchAll((error) => {
-							if (!canFallbackToBird) return Effect.fail(error);
-							source = "bird";
-							return verifyBirdAccountMatchesEffect(resolvedAccount).pipe(
-								Effect.flatMap(() => fetchMentionsViaBirdEffect({ limit })),
-							);
-						}),
-					);
+					});
 		if (source === "bird") {
 			yield* Effect.sync(() =>
 				onProgress?.({
@@ -953,7 +941,7 @@ function exportMentionsViaCachedLiveSourceEffect({
 	cacheTtlMs,
 }: ExportMentionsViaCachedLiveSourceOptions) {
 	return Effect.gen(function* () {
-		const primaryMode: MentionLiveSource = mode === "auto" ? "xurl" : mode;
+		const primaryMode: MentionLiveSource = mode === "auto" ? "bird" : mode;
 		if (primaryMode === "xurl") {
 			yield* trySync(() => assertXurlLimit(limit));
 		} else {
@@ -1007,7 +995,9 @@ function exportMentionsViaCachedLiveSourceEffect({
 		let source: MentionLiveSource = primaryMode;
 		const liveResult = yield* (
 			primaryMode === "bird"
-				? fetchMentionsViaBirdEffect({ limit })
+				? verifyBirdAccountMatchesEffect(resolvedAccount).pipe(
+						Effect.flatMap(() => fetchMentionsViaBirdEffect({ limit })),
+					)
 				: fetchMentionsViaXurlEffect({
 						resolvedAccount,
 						limit,
@@ -1015,13 +1005,6 @@ function exportMentionsViaCachedLiveSourceEffect({
 						parsedMaxPages,
 					})
 		).pipe(
-			Effect.catchAll((error) => {
-				if (mode !== "auto" || fetchAll) return Effect.fail(error);
-				source = "bird";
-				return verifyBirdAccountMatchesEffect(resolvedAccount).pipe(
-					Effect.flatMap(() => fetchMentionsViaBirdEffect({ limit })),
-				);
-			}),
 			Effect.flatMap((payload) =>
 				databaseWriteEffect((writeDb) => {
 					mergeMentionsIntoLocalStore(

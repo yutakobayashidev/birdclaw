@@ -2880,7 +2880,9 @@ describe("cli", () => {
 			"tweet_1",
 			"Strong point",
 		);
-		expect(createDmReplyMock).toHaveBeenCalledWith("dm_1", "Looks good");
+		expect(createDmReplyMock).toHaveBeenCalledWith("dm_1", "Looks good", {
+			transport: "bird",
+		});
 		expect(scoreInboxMock).toHaveBeenCalledWith({ kind: "dms", limit: 3 });
 		expect(listInboxItemsMock).toHaveBeenCalledWith({
 			kind: "dms",

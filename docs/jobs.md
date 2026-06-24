@@ -16,7 +16,7 @@ birdclaw --json jobs sync-account --account acct_openclaw --limit 100 --max-page
 What it does:
 
 - refreshes home timeline, mentions, mention threads, likes, bookmarks, and DMs for one account
-- uses `bird` for home and mentions; DMs can use `auto`/`xurl` for accepted-message imports, while message-request state still needs `bird`
+- uses `bird` for home and mentions; DMs need explicit `xurl` mode for accepted-message imports while the current `bird` CLI lacks DM support
 - appends one JSONL audit entry per run to `~/.birdclaw/audit/account-sync.jsonl`
 - records each step independently so one rate-limited surface does not hide the others
 - runs backup auto-sync after the scheduled refresh when enabled
@@ -27,7 +27,7 @@ Install the LaunchAgent:
 birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env --allow-bird-account
 ```
 
-The default interval is 1,800 seconds (30 minutes). Use `--steps timeline,mentions,dms` for a narrower job, or `--env-path ~/.config/bird/openclaw.env` when launchd needs account cookies. Pass `--allow-bird-account` only when the sourced cookies match `--account`; without it, Bird-backed timeline, mentions, and `--mode bird` DM steps refuse non-default account writes.
+The default interval is 1,800 seconds (30 minutes). Use `--steps timeline,mentions,dms` for a narrower job, or `--env-path ~/.config/bird/openclaw.env` when launchd needs account cookies. Pass `--allow-bird-account` only when the sourced cookies match `--account`; without it, Bird-backed timeline and mentions refuse non-default account writes. DM steps require explicit xurl mode while bird lacks DM support.
 
 ## `jobs sync-bookmarks`
 

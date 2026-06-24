@@ -7,11 +7,11 @@ import { getConversationThread } from "./dm-read-model";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
 import { upsertTweetAccountEdge } from "./tweet-account-edges";
 import {
-	dmViaXurlEffect,
-	lookupAuthenticatedUserFresh,
-	postViaXurlEffect,
-	replyViaXurlEffect,
-} from "./xurl";
+	getAuthenticatedBirdAccountEffect,
+	postTweetViaBirdEffect,
+	replyToTweetViaBirdEffect,
+} from "./bird";
+import { dmViaXurlEffect, lookupAuthenticatedUserFresh } from "./xurl";
 
 function toError(error: unknown) {
 	return error instanceof Error ? error : new Error(String(error));
@@ -68,6 +68,46 @@ function verifySelectedXurlAccountEffect(accountId: string) {
 			return yield* Effect.fail(
 				new Error(
 					`xurl is authenticated as @${authenticatedHandle || authenticatedId}, not @${expectedHandle}`,
+				),
+			);
+		}
+	});
+}
+
+function verifySelectedBirdAccountEffect(accountId: string) {
+	return Effect.gen(function* () {
+		if (liveWritesDisabled()) return;
+		if (e2eFakeLiveWritesEnabled()) return;
+		const db = yield* trySync(() => getReadDb());
+		const account = yield* trySync(
+			() =>
+				db
+					.prepare("select handle, external_user_id from accounts where id = ?")
+					.get(accountId) as
+					| { handle: string; external_user_id: string | null }
+					| undefined,
+		);
+		if (!account) {
+			return yield* Effect.fail(new Error(`Unknown account: ${accountId}`));
+		}
+		const authenticated = yield* getAuthenticatedBirdAccountEffect();
+		const authenticatedId =
+			typeof authenticated?.id === "string" ? authenticated.id : "";
+		const authenticatedHandle =
+			typeof authenticated?.username === "string"
+				? authenticated.username.replace(/^@/, "")
+				: "";
+		const expectedHandle = account.handle.replace(/^@/, "");
+		if (
+			(account.external_user_id &&
+				account.external_user_id !== authenticatedId) ||
+			(!account.external_user_id &&
+				(!authenticatedHandle ||
+					authenticatedHandle.toLowerCase() !== expectedHandle.toLowerCase()))
+		) {
+			return yield* Effect.fail(
+				new Error(
+					`bird is authenticated as @${authenticatedHandle || authenticatedId}, not @${expectedHandle}`,
 				),
 			);
 		}
@@ -215,8 +255,8 @@ export function createPostEffect(accountId: string, text: string) {
 			),
 		);
 
-		yield* verifySelectedXurlAccountEffect(accountId);
-		const transport = yield* postViaXurlEffect(text);
+		yield* verifySelectedBirdAccountEffect(accountId);
+		const transport = yield* postTweetViaBirdEffect(text);
 		if (!transport.ok) {
 			return yield* Effect.fail(new Error(transport.output || "post failed"));
 		}
@@ -281,8 +321,8 @@ export function createTweetReplyEffect(
 			preflightWrite(db, (writeDb) => writeReplyDraft(writeDb, draft)),
 		);
 
-		yield* verifySelectedXurlAccountEffect(accountId);
-		const transport = yield* replyViaXurlEffect(tweetId, text);
+		yield* verifySelectedBirdAccountEffect(accountId);
+		const transport = yield* replyToTweetViaBirdEffect(tweetId, text);
 		if (!transport.ok) {
 			return yield* Effect.fail(new Error(transport.output || "reply failed"));
 		}
@@ -300,8 +340,19 @@ export function createTweetReply(
 	return runEffectPromise(createTweetReplyEffect(accountId, tweetId, text));
 }
 
-export function createDmReplyEffect(conversationId: string, text: string) {
+export type DmReplyTransport = "bird" | "xurl";
+
+export interface CreateDmReplyOptions {
+	transport?: DmReplyTransport;
+}
+
+export function createDmReplyEffect(
+	conversationId: string,
+	text: string,
+	options: CreateDmReplyOptions = {},
+) {
 	return Effect.gen(function* () {
+		const transportMode = options.transport ?? "bird";
 		const draft = yield* trySync(() => {
 			const conversation = getConversationThread(conversationId);
 			if (!conversation) {
@@ -354,6 +405,11 @@ export function createDmReplyEffect(conversationId: string, text: string) {
 			}),
 		);
 
+		if (transportMode !== "xurl") {
+			return yield* Effect.fail(
+				new Error("bird CLI does not support direct message sends"),
+			);
+		}
 		yield* verifySelectedXurlAccountEffect(draft.accountId);
 		const transport = yield* dmViaXurlEffect(draft.handle, text);
 		if (!transport.ok) {
@@ -390,8 +446,12 @@ export function createDmReplyEffect(conversationId: string, text: string) {
 	});
 }
 
-export function createDmReply(conversationId: string, text: string) {
-	return runEffectPromise(createDmReplyEffect(conversationId, text));
+export function createDmReply(
+	conversationId: string,
+	text: string,
+	options: CreateDmReplyOptions = {},
+) {
+	return runEffectPromise(createDmReplyEffect(conversationId, text, options));
 }
 
 export type DmRequestMutationAction = "accept" | "reject" | "block";

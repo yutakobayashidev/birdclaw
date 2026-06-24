@@ -86,6 +86,7 @@ export const Route = createFileRoute("/api/action")({
 							result = yield* createDmReplyEffect(
 								body.conversationId,
 								body.text,
+								{ transport: body.transport },
 							);
 						} else if (body.kind === "scoreInbox") {
 							result = yield* scoreInboxEffect({

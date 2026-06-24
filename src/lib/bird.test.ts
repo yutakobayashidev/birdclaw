@@ -26,16 +26,6 @@ function mockBirdRejectOnce(error: Error & { stderr?: string }) {
 	});
 }
 
-function mockBirdRejectWithStdoutOnce(
-	stdout: string,
-	error: Error & { stderr?: string },
-) {
-	execFileAsyncMock.mockImplementationOnce(async (_command, args: string[]) => {
-		writeFileSync(args[3] ?? "", stdout);
-		throw error;
-	});
-}
-
 function expectBirdCommandCall(callNumber: number, args: string[]) {
 	const call = execFileAsyncMock.mock.calls[callNumber - 1];
 	expect(call).toBeDefined();
@@ -350,27 +340,14 @@ describe("bird transport wrapper", () => {
 		);
 	});
 
-	it("returns bird direct messages payloads", async () => {
+	it("reports direct messages as unsupported by the current bird CLI", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
-		const payload = {
-			success: true,
-			conversations: [
-				{
-					id: "dm_1",
-					participants: [{ id: "42", username: "sam", name: "Sam" }],
-					messages: [{ id: "event_1", text: "hello" }],
-				},
-			],
-			events: [{ id: "event_1", text: "hello" }],
-		};
-		mockBirdStdoutOnce(JSON.stringify(payload));
-
 		const { listDirectMessagesViaBird } = await import("./bird");
 
-		await expect(listDirectMessagesViaBird({ maxResults: 5 })).resolves.toEqual(
-			payload,
+		await expect(listDirectMessagesViaBird({ maxResults: 5 })).rejects.toThrow(
+			"bird CLI does not support direct messages",
 		);
-		expectBirdCommandCall(1, ["dms", "-n", "5", "--json"]);
+		expect(execFileAsyncMock).not.toHaveBeenCalled();
 	});
 
 	it("parses the authenticated bird account from whoami output", async () => {
@@ -393,40 +370,8 @@ describe("bird transport wrapper", () => {
 		expectBirdCommandCall(1, ["whoami"]);
 	});
 
-	it("passes message-request DM paging options to bird", async () => {
+	it("reports message-request mutations as unsupported by the current bird CLI", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
-		const payload = { success: true, conversations: [], events: [] };
-		mockBirdStdoutOnce(JSON.stringify(payload));
-
-		const { listDirectMessagesViaBird } = await import("./bird");
-
-		await expect(
-			listDirectMessagesViaBird({
-				maxResults: 50,
-				inbox: "requests",
-				maxPages: 2,
-				pageDelayMs: 750,
-			}),
-		).resolves.toEqual(payload);
-		expectBirdCommandCall(1, [
-			"dms",
-			"-n",
-			"50",
-			"--json",
-			"--inbox",
-			"requests",
-			"--max-pages",
-			"2",
-			"--page-delay-ms",
-			"750",
-		]);
-	});
-
-	it("preserves structured JSON from failed bird DM mutations", async () => {
-		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
-		const payload = { success: false, error: "not found" };
-		mockBirdRejectWithStdoutOnce(JSON.stringify(payload), new Error("exit 1"));
-
 		const { runDirectMessageRequestMutationViaBird } = await import("./bird");
 
 		await expect(
@@ -434,35 +379,8 @@ describe("bird transport wrapper", () => {
 				action: "reject",
 				conversationId: "111-333",
 			}),
-		).resolves.toEqual(payload);
-		expectBirdCommandCall(1, ["dm-reject", "111-333", "--json"]);
-	});
-
-	it("passes pagination options to bird DM block mutations", async () => {
-		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
-		const payload = {
-			success: true,
-			conversationId: "111-333",
-			blockedUserId: "333",
-		};
-		mockBirdStdoutOnce(JSON.stringify(payload));
-
-		const { runDirectMessageRequestMutationViaBird } = await import("./bird");
-
-		await expect(
-			runDirectMessageRequestMutationViaBird({
-				action: "block",
-				conversationId: "111-333",
-				maxPages: 8,
-			}),
-		).resolves.toEqual(payload);
-		expectBirdCommandCall(1, [
-			"dm-block",
-			"111-333",
-			"--json",
-			"--max-pages",
-			"8",
-		]);
+		).rejects.toThrow("bird CLI does not support direct message mutations");
+		expect(execFileAsyncMock).not.toHaveBeenCalled();
 	});
 
 	it("maps bird likes and bookmarks json into xurl-compatible payloads", async () => {
@@ -776,64 +694,46 @@ describe("bird transport wrapper", () => {
 				following_count: 45,
 			},
 		});
-		expectBirdCommandCall(1, ["user", "42", "--json", "--profile-only"]);
+		expectBirdCommandCall(1, ["user", "42", "--json"]);
 	});
 
-	it("falls back to count one for older bird profile lookups", async () => {
-		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
-		mockBirdRejectOnce(
-			Object.assign(new Error("Command failed"), {
-				stderr: "error: unknown option '--profile-only'",
-			}),
-		);
-		mockBirdStdoutOnce(
-			JSON.stringify({
-				user: {
-					id: "42",
-					username: "sam",
-					name: "Sam",
-					followersCount: 123,
-				},
-			}),
-		);
-		const { lookupProfileViaBird } = await import("./bird");
-
-		await expect(lookupProfileViaBird("42")).resolves.toEqual(
-			expect.objectContaining({
-				id: "42",
-				username: "sam",
-				public_metrics: expect.objectContaining({ followers_count: 123 }),
-			}),
-		);
-		expectBirdCommandCall(1, ["user", "42", "--json", "--profile-only"]);
-		expectBirdCommandCall(2, ["user", "42", "--json", "--count", "1"]);
-	});
-
-	it("rejects unexpected direct messages json", async () => {
+	it("posts tweets and replies through the current bird CLI", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
 		mockBirdStdoutOnce(
-			JSON.stringify({
-				success: false,
-				conversations: [],
-				events: [],
-			}),
+			[
+				"[ok] Tweet posted successfully!",
+				"url: https://x.com/i/status/12345",
+			].join("\n"),
 		);
 		mockBirdStdoutOnce(
-			JSON.stringify({
-				success: true,
-				conversations: {},
-				events: [],
-			}),
+			[
+				"[ok] Reply posted successfully!",
+				"url: https://x.com/i/status/67890",
+			].join("\n"),
 		);
+		const { postTweetViaBird, replyToTweetViaBird } = await import("./bird");
 
-		const { listDirectMessagesViaBird } = await import("./bird");
-
-		await expect(listDirectMessagesViaBird({ maxResults: 5 })).rejects.toThrow(
-			"bird dms returned unexpected JSON",
-		);
-		await expect(listDirectMessagesViaBird({ maxResults: 5 })).rejects.toThrow(
-			"bird dms returned unexpected JSON",
-		);
+		await expect(postTweetViaBird("hello bird")).resolves.toEqual({
+			ok: true,
+			output: expect.stringContaining("12345"),
+			tweetId: "12345",
+			transport: "bird",
+		});
+		await expect(
+			replyToTweetViaBird("tweet_parent", "hello parent"),
+		).resolves.toEqual({
+			ok: true,
+			output: expect.stringContaining("67890"),
+			tweetId: "67890",
+			transport: "bird",
+		});
+		expectBirdCommandCall(1, ["--plain", "tweet", "hello bird"]);
+		expectBirdCommandCall(2, [
+			"--plain",
+			"reply",
+			"tweet_parent",
+			"hello parent",
+		]);
 	});
 
 	it("uses bird profiles for batch profile hydration", async () => {
@@ -873,29 +773,21 @@ describe("bird transport wrapper", () => {
 		]);
 	});
 
-	it("falls back to individual bird user lookups when profiles is unavailable", async () => {
+	it("does not fallback when bird profiles is unavailable", async () => {
 		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
 		mockBirdRejectOnce(
 			Object.assign(new Error("unknown command profiles"), {
 				stderr: "error: unknown command profiles",
 			}),
 		);
-		mockBirdStdoutOnce(
-			JSON.stringify({
-				user: {
-					id: "13334762",
-					username: "github",
-					name: "GitHub",
-				},
-			}),
-		);
 
 		const { lookupProfilesViaBird } = await import("./bird");
-		const results = await lookupProfilesViaBird(["github"]);
 
+		await expect(lookupProfilesViaBird(["github"])).rejects.toThrow(
+			"unknown command profiles",
+		);
 		expectBirdCommandCall(1, ["profiles", "github", "--json"]);
-		expectBirdCommandCall(2, ["user", "github", "--json", "--profile-only"]);
-		expect(results[0]?.user?.username).toBe("github");
+		expect(execFileAsyncMock).toHaveBeenCalledTimes(1);
 	});
 
 	it("normalizes bird helper edge cases", async () => {
@@ -917,17 +809,6 @@ describe("bird transport wrapper", () => {
 			}),
 		);
 		expect(__test__.formatBirdCommandError("boom", "/tmp/bird")).toBe("boom");
-		expect(
-			__test__.isUnsupportedBirdOptionError(
-				Object.assign(new Error("bad"), {
-					stdout: "error: unknown option '--profile-only'",
-				}),
-				"--profile-only",
-			),
-		).toBe(true);
-		expect(__test__.isUnsupportedBirdOptionError(null, "--profile-only")).toBe(
-			false,
-		);
 		expect(__test__.getBirdTweetItems([{ id: "1" }], "mentions")).toEqual([
 			{ id: "1" },
 		]);

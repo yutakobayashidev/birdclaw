@@ -32,8 +32,14 @@ export function registerComposeCommands({
 	composeCommand
 		.command("dm <conversationId> <text>")
 		.description("Reply inside an existing DM conversation")
-		.action(async (conversationId, text) => {
-			const result = await createDmReply(conversationId, text);
+		.option("--transport <transport>", "DM transport: xurl or bird", "bird")
+		.action(async (conversationId, text, options) => {
+			if (options.transport !== "bird" && options.transport !== "xurl") {
+				throw new Error("--transport must be bird or xurl");
+			}
+			const result = await createDmReply(conversationId, text, {
+				transport: options.transport,
+			});
 			await autoSyncAfterWrite();
 			print(result, asJson());
 		});

@@ -169,7 +169,9 @@ describe("api action route", () => {
 			}),
 		});
 
-		expect(createDmReplyMock).toHaveBeenCalledWith("dm_003", "Send the mock.");
+		expect(createDmReplyMock).toHaveBeenCalledWith("dm_003", "Send the mock.", {
+			transport: undefined,
+		});
 		expect(response.status).toBe(200);
 	});
 
@@ -294,7 +296,9 @@ describe("api action route", () => {
 			}),
 		});
 
-		expect(createDmReplyMock).toHaveBeenCalledWith("", "");
+		expect(createDmReplyMock).toHaveBeenCalledWith("", "", {
+			transport: undefined,
+		});
 	});
 
 	it("uses score defaults when score payload fields are missing", async () => {

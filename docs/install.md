@@ -88,7 +88,7 @@ npm install -g @steipete/bird
 bird whoami
 ```
 
-bird reads cookies from a logged-in Safari, Chrome, or Firefox profile. This matters most for DMs, mentions, timeline reads, and moderation flows where X rejects OAuth2 writes.
+bird reads cookies from a logged-in Safari, Chrome, or Firefox profile. This matters most for timeline, mentions, likes/bookmarks, profile lookups, tweet/reply writes, and moderation flows where X rejects OAuth2 writes. The current bird CLI does not expose DMs.
 
 If you only run birdclaw via `launchd` (`jobs install-bookmarks-launchd`), `bird` may need its `AUTH_TOKEN`/`CT0` exported via an env file because launchd does not see your interactive browser session. See [Jobs](jobs.md#env-files-for-launchd).
 

@@ -698,12 +698,8 @@ describe("live timeline collection sync", () => {
 		consoleError.mockRestore();
 	});
 
-	it("falls back to bird for bookmarks when xurl fails", async () => {
+	it("uses bird directly for bookmarks in auto mode without spending xurl", async () => {
 		setupTempHome();
-		mocks.lookupUsersByHandles.mockResolvedValue([{ id: "25401953" }]);
-		mocks.listBookmarkedTweetsViaXurl.mockRejectedValue(
-			new Error("xurl unauthorized"),
-		);
 		mocks.listBookmarkedTweetsViaBird.mockResolvedValue({
 			data: [
 				{
@@ -742,6 +738,7 @@ describe("live timeline collection sync", () => {
 			all: true,
 			maxPages: 2,
 		});
+		expect(mocks.listBookmarkedTweetsViaXurl).not.toHaveBeenCalled();
 		expect(syncedBookmark).toMatchObject({
 			bookmarked: true,
 			liked: false,
@@ -749,14 +746,13 @@ describe("live timeline collection sync", () => {
 		});
 	});
 
-	it("does not pass the implicit early-stop cap to bird fallback", async () => {
+	it("does not pass the implicit early-stop cap to auto bird sync", async () => {
 		setupTempHome();
 		const consoleError = vi
 			.spyOn(console, "error")
 			.mockImplementation(() => {});
-		mocks.listBookmarkedTweetsViaXurl.mockRejectedValue(new Error("xurl down"));
 		mocks.listBookmarkedTweetsViaBird.mockResolvedValue({
-			data: [makeTweet("bookmark_bird_fallback", "bird fallback", "43")],
+			data: [makeTweet("bookmark_auto_bird", "auto bird", "43")],
 			includes: {
 				users: [{ id: "43", username: "amelia", name: "Amelia" }],
 			},
@@ -779,6 +775,7 @@ describe("live timeline collection sync", () => {
 			all: false,
 			maxPages: undefined,
 		});
+		expect(mocks.listBookmarkedTweetsViaXurl).not.toHaveBeenCalled();
 		consoleError.mockRestore();
 	});
 

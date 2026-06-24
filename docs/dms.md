@@ -11,7 +11,7 @@ birdclaw treats DMs as first-class content: full-text indexed, multi-account, an
 
 ```bash
 birdclaw dms list --refresh --limit 10 --json
-birdclaw dms list --refresh --mode auto --limit 10 --json
+birdclaw dms list --refresh --mode xurl --limit 10 --json
 birdclaw dms list --unreplied --min-followers 500 --min-influence-score 90 --sort followers --json
 ```
 
@@ -20,7 +20,7 @@ birdclaw dms list --unreplied --min-followers 500 --min-influence-score 90 --sor
 Flags:
 
 - `--refresh` — refresh live DMs before listing
-- `--mode bird|xurl|auto` — choose the live transport for refreshes
+- `--mode bird|xurl|auto` — choose the live transport for refreshes; use `xurl` for live DM refreshes with the current bird CLI
 - `--cache-ttl <seconds>` — tune freshness
 - `--participant <handle-or-id>`
 - `--min-followers <n>` / `--max-followers <n>`
@@ -35,8 +35,7 @@ Flags:
 Refresh live direct messages and merge into the canonical conversation/message tables:
 
 ```bash
-birdclaw dms sync --limit 50 --refresh --json
-birdclaw dms sync --mode auto --limit 50 --refresh --json
+birdclaw dms sync --mode xurl --limit 50 --refresh --json
 ```
 
 Flags:
@@ -49,7 +48,7 @@ Flags:
 
 Sync is idempotent — re-running merges new events without disturbing already-imported message bodies.
 
-`--mode bird` remains the default because it can read accepted DMs and message requests with accept/reject state. `--mode xurl` imports recent OAuth2 `/2/dm_events` as accepted conversations only; use `--mode auto` to try xurl for accepted DMs and fall back to bird. Message-request inbox syncs always require `bird`.
+`--mode bird` and `--mode auto` currently fail fast because the current `bird` CLI does not expose DM reads, sends, or message-request mutations. `--mode xurl` imports recent OAuth2 `/2/dm_events` as accepted conversations only. Message-request inbox sync is unsupported until bird exposes it.
 
 ## Search
 
@@ -110,10 +109,10 @@ birdclaw dms list --unreplied --min-influence-score 80 --limit 20 --json
 ## Reply
 
 ```bash
-birdclaw compose dm dm_003 "Send it over."
+birdclaw compose dm dm_003 "Send it over." --transport xurl
 ```
 
-Replies use the active live transport (`auto` by default). Without a working transport, the command fails fast with exit code `4` rather than recording a half-state local row.
+DM replies default to bird and fail fast because the current `bird` CLI does not expose DM sends. Pass `--transport xurl` to send through xurl for accepted conversations. Without a working explicit transport, the command fails before recording a half-state local row.
 
 ## Archive import
 

@@ -178,8 +178,8 @@ Notes:
 - Node `25.8.1` or Node 26.x
 - `pnpm`
 - macOS recommended for Spotlight archive discovery
-- `xurl` optional for live reads / writes
-- `bird` optional for cookie-backed likes, bookmarks, mentions, DMs, and write fallback
+- `bird` optional for cookie-backed timeline, mentions, likes, bookmarks, profiles, and tweet/reply writes
+- `xurl` optional for authored sync, bounded historical reads, and explicit accepted-DM operations
 - OpenAI API key optional for inbox scoring; set `OPENAI_BASE_URL` to use an OpenAI-compatible endpoint
 
 ## Install
@@ -301,7 +301,7 @@ pnpm cli search tweets --bookmarked --limit 20 --json
 
 ### Sync authored tweets, likes, bookmarks, home timeline, and mentions
 
-`auto` tries `xurl` first for likes/bookmarks, then falls back to `bird`. Use `bird` directly when the API path is unavailable for the account/token you have locally. For repeated xurl collection syncs, add `--early-stop` to stop paging once a whole page already exists locally; without `--all` or `--max-pages`, it caps at 10 pages.
+`auto` uses `bird` for timeline, mentions, likes, and bookmarks. Use `--mode xurl` only when you explicitly need an xurl-only surface such as authored sync, bounded historical reads, or repeated xurl collection paging. For repeated xurl collection syncs, add `--early-stop` to stop paging once a whole page already exists locally; without `--all` or `--max-pages`, it caps at 10 pages.
 
 ```bash
 pnpm cli sync authored --mode xurl --limit 100 --json
@@ -311,6 +311,7 @@ pnpm cli sync likes --mode auto --limit 100 --max-pages 5 --early-stop --refresh
 pnpm cli sync bookmarks --mode auto --limit 100 --max-pages 5 --early-stop --refresh --json
 pnpm cli sync bookmarks --mode bird --all --max-pages 5 --limit 100 --refresh --json
 pnpm cli sync timeline --limit 100 --refresh --json
+pnpm cli sync mentions --mode bird --limit 50 --refresh --json
 pnpm cli sync mentions --mode xurl --limit 100 --max-pages 3 --refresh --json
 pnpm cli sync mention-threads --limit 30 --delay-ms 1500 --timeout-ms 15000 --json
 ```
@@ -442,13 +443,12 @@ pnpm cli search dms "blacksmith" --context 4 --resolve-profiles --expand-urls --
 pnpm cli whois "blacksmith guy" --context 4 --no-xurl-fallback --json
 pnpm cli whois "github guy" --current-affiliation github --exclude-domain-only --no-xurl-fallback
 pnpm cli whois "blacksmith" --tweets --context 4 --no-xurl-fallback --json
-pnpm cli dms sync --limit 50 --refresh --json
-pnpm cli dms sync --mode auto --limit 50 --refresh --json
+pnpm cli dms sync --mode xurl --limit 50 --refresh --json
 pnpm cli dms list --refresh --limit 10 --json
 pnpm cli dms list --unreplied --min-followers 500 --min-influence-score 90 --sort followers --json
 ```
 
-`dms sync/list --refresh` supports `--mode bird|xurl|auto`. `bird` is the default and required for message-request state; `xurl` imports recent OAuth2 DM events as accepted conversations, and `auto` falls back to bird when xurl cannot read them.
+`dms sync/list --refresh` supports `--mode bird|xurl|auto`, but the current `bird` CLI does not expose DMs. Use `--mode xurl` for recent accepted OAuth2 DM events. Message requests, accept/reject, block/mute, and bird-backed DM sends are triaged as unsupported until bird exposes those commands.
 
 `--resolve-profiles` fills archive-imported numeric DM profiles through the local
 cache first, then `bird`, then `xurl` unless `--no-xurl-fallback` is set.
@@ -552,7 +552,7 @@ Notes:
 ```bash
 pnpm cli compose post "Ship local software."
 pnpm cli compose reply tweet_004 "On it."
-pnpm cli compose dm dm_003 "Send it over."
+pnpm cli compose dm dm_003 "Send it over." --transport xurl
 ```
 
 ### Text Backup
@@ -664,8 +664,8 @@ tail -n 1 ~/.birdclaw/audit/bookmarks-sync.jsonl | jq .
 
 Current preference:
 
-- `xurl` first
-- `bird` fallback for surfaces where cookie-backed reads work better
+- `bird` first for supported live reads and tweet/reply writes
+- `xurl` only when explicitly selected or for xurl-only surfaces
 
 Without `xurl` or `bird`, `birdclaw` still works in local/archive mode.
 

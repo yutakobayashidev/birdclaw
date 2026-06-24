@@ -10,10 +10,10 @@ Three verbs cover everything you can publish: `post`, `reply`, and `dm`.
 ```bash
 birdclaw compose post "Ship local software."
 birdclaw compose reply tweet_004 "On it."
-birdclaw compose dm dm_003 "Send it over."
+birdclaw compose dm dm_003 "Send it over." --transport xurl
 ```
 
-All three use the active live transport (`auto` by default — `xurl` first, `bird` second). They never touch SQLite when the live call fails, so a failed publish does not leave a half-state row behind.
+Tweet posts and tweet replies use `bird` first. DM replies require `--transport xurl` with the current bird CLI because bird does not expose DM sends. Compose commands never touch SQLite when the live call fails, so a failed publish does not leave a half-state row behind.
 
 ## compose post
 
@@ -52,11 +52,11 @@ The `<tweet-id>` argument accepts:
 Reply within an existing DM conversation by conversation ID.
 
 ```bash
-birdclaw compose dm dm_003 "Send it over."
-birdclaw compose dm dm_004 --account acct_primary "Sounds good."
+birdclaw compose dm dm_003 "Send it over." --transport xurl
+birdclaw compose dm dm_004 "Sounds good." --transport xurl
 ```
 
-`compose dm` resolves the conversation, picks the right transport (`bird` is preferred for DM writes because OAuth2 DM scopes are flaky), and merges the sent message back into the local DM tables.
+`compose dm` resolves the conversation, requires an explicit xurl transport for live send, and merges the sent message back into the local DM tables only after the transport succeeds.
 
 ## Disabling live writes
 
