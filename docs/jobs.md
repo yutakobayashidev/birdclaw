@@ -19,6 +19,7 @@ What it does:
 - refreshes home timeline, mentions, mention threads, likes, bookmarks, and DMs for one account
 - uses `bird` for home, mentions, and mention threads; DMs need explicit `xurl` mode for accepted-message imports while the current `bird` CLI lacks DM support
 - uses `bird` for likes and bookmarks, including non-default accounts
+- stops bird home/collection paging once it reaches already-local rows, so steady-state runs avoid walking old pages repeatedly
 - appends one JSONL audit entry per run to `~/.birdclaw/audit/account-sync.jsonl`
 - records each step independently so one rate-limited surface does not hide the others
 - runs backup auto-sync after the scheduled refresh when enabled

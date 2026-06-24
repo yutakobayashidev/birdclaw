@@ -281,31 +281,96 @@ function fetchXurlCollectionEffect({
 }
 
 function fetchBirdCollectionEffect({
+	db,
 	kind,
+	accountId,
 	limit,
 	all,
 	maxPages,
+	earlyStop,
 	profileName,
 }: {
+	db: Database;
 	kind: TimelineCollectionKind;
+	accountId: string;
 	limit: number;
 	all: boolean;
 	maxPages: number | null;
+	earlyStop: boolean;
 	profileName?: string;
 }) {
-	return kind === "likes"
-		? liveTransportGateway.bird.listLikes({
-				maxResults: limit,
-				all,
-				maxPages: maxPages ?? undefined,
-				...(profileName ? { profileName } : {}),
-			})
-		: liveTransportGateway.bird.listBookmarks({
-				maxResults: limit,
-				all,
-				maxPages: maxPages ?? undefined,
-				...(profileName ? { profileName } : {}),
-			});
+	const fetchPage = (cursor?: string) =>
+		kind === "likes"
+			? liveTransportGateway.bird.listLikes({
+					maxResults: limit,
+					all: earlyStop ? true : all,
+					maxPages: earlyStop ? 1 : (maxPages ?? undefined),
+					...(cursor ? { cursor } : {}),
+					...(profileName ? { profileName } : {}),
+				})
+			: liveTransportGateway.bird.listBookmarks({
+					maxResults: limit,
+					all: earlyStop ? true : all,
+					maxPages: earlyStop ? 1 : (maxPages ?? undefined),
+					...(cursor ? { cursor } : {}),
+					...(profileName ? { profileName } : {}),
+				});
+
+	if (!earlyStop) return fetchPage();
+
+	return Effect.gen(function* () {
+		let saturatedAtPage: number | undefined;
+		const result = yield* runSyncPlanEffect({
+			fetchPage: ({ cursor, pageIndex }) =>
+				fetchPage(cursor).pipe(
+					Effect.map((payload) => {
+						const tweetIds = payload.data.map((tweet) => tweet.id);
+						const { existingTweetIds, uniqueTweetCount } =
+							getCollectionPageDedupe(db, accountId, kind, tweetIds);
+						const saturated =
+							tweetIds.length > 0 && existingTweetIds.size === uniqueTweetCount;
+						if (saturated) saturatedAtPage = pageIndex + 1;
+						return {
+							payload,
+							persistedPayload: filterExistingCollectionTweets(
+								payload,
+								existingTweetIds,
+							),
+							saturated,
+						};
+					}),
+				),
+			getItemCount: (page) => page.payload.data.length,
+			getNextCursor: (page) =>
+				typeof page.payload.meta?.next_token === "string"
+					? page.payload.meta.next_token
+					: undefined,
+			maxPages: all ? (maxPages ?? undefined) : (maxPages ?? 1),
+			shouldStop: ({ page }) => page.saturated,
+			onPage: ({ page, pageNumber }) => {
+				if (page.saturated) {
+					console.error(
+						`${kind} saturated at page ${pageNumber} (100% existing rows)`,
+					);
+				}
+			},
+		});
+		const merged = mergePayloads(
+			result.pages
+				.filter((page) => !page.saturated)
+				.map((page) => page.persistedPayload),
+		);
+		const saturationMeta =
+			saturatedAtPage === undefined
+				? {}
+				: { saturated_at_page: saturatedAtPage, next_token: null };
+		merged.meta = {
+			...merged.meta,
+			page_count: result.pages.length,
+			...saturationMeta,
+		};
+		return merged;
+	});
 }
 
 export function syncTimelineCollectionEffect({
@@ -325,6 +390,10 @@ export function syncTimelineCollectionEffect({
 		const effectiveMode = mode === "auto" ? "bird" : mode;
 		const shouldApplyEarlyStopCap =
 			earlyStop && !all && parsedMaxPages === null && effectiveMode === "xurl";
+		const birdEarlyStopMaxPages =
+			earlyStop && !all && parsedMaxPages === null && effectiveMode === "bird"
+				? 1
+				: parsedMaxPages;
 		const xurlMaxPages = shouldApplyEarlyStopCap
 			? DEFAULT_EARLY_STOP_MAX_PAGES
 			: parsedMaxPages;
@@ -337,7 +406,7 @@ export function syncTimelineCollectionEffect({
 			resolveLiveSyncAccount(db, account),
 		);
 		const cacheMaxPages =
-			effectiveMode === "bird" ? parsedMaxPages : xurlMaxPages;
+			effectiveMode === "bird" ? birdEarlyStopMaxPages : xurlMaxPages;
 		const cacheKey = `${kind}:${mode}:${resolvedAccount.accountId}:${String(limit)}:${all ? "all" : "single"}:${cacheMaxPages === null ? "all-pages" : String(cacheMaxPages)}${earlyStop ? ":early-stop" : ""}`;
 
 		if (shouldApplyEarlyStopCap) {
@@ -358,10 +427,13 @@ export function syncTimelineCollectionEffect({
 			earlyStop,
 		});
 		const birdFetch = fetchBirdCollectionEffect({
+			db,
 			kind,
+			accountId: resolvedAccount.accountId,
 			limit,
 			all,
-			maxPages: parsedMaxPages,
+			maxPages: birdEarlyStopMaxPages,
+			earlyStop,
 			...(resolvedAccount.birdProfileName
 				? { profileName: resolvedAccount.birdProfileName }
 				: {}),

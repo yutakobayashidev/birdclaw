@@ -2707,7 +2707,7 @@ describe("cli", () => {
 				language: "zh-CN",
 				maxTweets: 10,
 				maxLinks: 2,
-				liveSync: true,
+				liveSync: false,
 				liveSyncMode: "xurl",
 			},
 			expect.objectContaining({ onDelta: expect.any(Function) }),
@@ -2728,6 +2728,32 @@ describe("cli", () => {
 			expect.stringContaining('"model": "gpt-5.5"'),
 		);
 		stdoutWriteMock.mockRestore();
+	});
+
+	it("enables digest live sync only when explicitly requested", async () => {
+		const { runCli } = await loadCli();
+
+		await runCli(["node", "birdclaw", "today", "--live-sync"]);
+		await runCli(["node", "birdclaw", "digest", "24h", "--live-mode", "xurl"]);
+
+		expect(streamPeriodDigestMock).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				period: "today",
+				liveSync: true,
+				liveSyncMode: "xurl",
+			}),
+			expect.anything(),
+		);
+		expect(streamPeriodDigestMock).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				period: "24h",
+				liveSync: true,
+				liveSyncMode: "xurl",
+			}),
+			expect.anything(),
+		);
 	});
 
 	it("rejects invalid digest numeric options", async () => {

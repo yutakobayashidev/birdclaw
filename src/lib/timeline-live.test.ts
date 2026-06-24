@@ -455,6 +455,66 @@ describe("live home timeline sync", () => {
 		).rejects.toThrow("xurl home timeline mode does not support --for-you");
 	});
 
+	it("stops bird following timeline early when a fetched page is already local", async () => {
+		makeTempHome();
+		const db = getNativeDb();
+		db.prepare(
+			`
+      insert into tweets (
+        id, author_profile_id, text, created_at,
+        is_replied, reply_to_id, like_count, media_count,
+        entities_json, media_json, quoted_tweet_id
+      ) values (?, 'profile_user_42', ?, ?, 0, null, 0, 0, '{}', '[]', null)
+      `,
+		).run(
+			"home_existing_boundary",
+			"existing boundary",
+			"2026-04-26T13:43:34.000Z",
+		);
+		db.prepare(
+			`
+      insert into tweet_account_edges (
+        account_id, tweet_id, kind, source, raw_json, first_seen_at, last_seen_at, seen_count, updated_at
+      ) values ('acct_primary', 'home_existing_boundary', 'home', 'bird', '{}', ?, ?, 1, ?)
+      `,
+		).run(
+			"2026-04-26T13:43:34.000Z",
+			"2026-04-26T13:43:34.000Z",
+			"2026-04-26T13:43:34.000Z",
+		);
+		listHomeTimelineViaBirdMock.mockResolvedValueOnce({
+			data: [
+				{
+					id: "home_existing_boundary",
+					author_id: "42",
+					text: "existing boundary",
+					created_at: "2026-04-26T13:43:34.000Z",
+				},
+			],
+			includes: { users: [{ id: "42", username: "sam", name: "Sam" }] },
+			meta: { result_count: 1, next_token: "older-page" },
+		});
+		const { syncHomeTimeline } = await import("./timeline-live");
+
+		const result = await syncHomeTimeline({
+			account: "acct_primary",
+			mode: "bird",
+			limit: 5,
+			maxPages: 3,
+			earlyStop: true,
+			refresh: true,
+		});
+
+		expect(result).toMatchObject({ source: "bird", count: 0 });
+		expect(listHomeTimelineViaBirdMock).toHaveBeenCalledTimes(1);
+		expect(listHomeTimelineViaBirdMock).toHaveBeenCalledWith({
+			maxResults: 5,
+			following: true,
+			all: true,
+			maxPages: 1,
+		});
+	});
+
 	it("uses bird directly for non-default account auto syncs", async () => {
 		makeTempHome();
 		listHomeTimelineViaBirdMock.mockResolvedValueOnce({

@@ -430,6 +430,8 @@ birdclaw profile-analyse openai --max-pages 20 --max-conversations 40 --conversa
 
 `birdclaw today` streams a local "what happened" digest from the SQLite store. It uses the OpenAI Responses API with `gpt-5.5`, medium reasoning, and priority service tier by default. Set `OPENAI_API_KEY`; set `OPENAI_BASE_URL` for OpenAI-compatible endpoints; override with `BIRDCLAW_AI_MODEL`, `BIRDCLAW_OPENAI_REASONING_EFFORT`, or `BIRDCLAW_OPENAI_SERVICE_TIER` when needed. Use `--language <locale-id>` or `BIRDCLAW_DIGEST_LANGUAGE` for localized reports.
 
+The normal bird-first workflow is to run `birdclaw jobs sync-account` from launchd so recent home, mentions, mention threads, likes, and bookmarks stay warm in local SQLite, then run `today`, `digest`, `search tweets`, or `discuss --mode local` against that local store. Digest commands do not live-refresh by default. Use `--live-sync` or `--live-mode xurl` only when you explicitly want a bounded live refresh for the selected report window.
+
 ```bash
 birdclaw today
 birdclaw today --language zh-CN
@@ -437,6 +439,7 @@ birdclaw digest 24h --refresh
 birdclaw digest week --json
 birdclaw digest --since 2026-05-16T00:00:00Z --until 2026-05-17T00:00:00Z
 birdclaw digest today --include-dms
+birdclaw digest week --live-mode xurl
 ```
 
 The web UI exposes the same stream under `What happened`. DMs are excluded unless explicitly enabled. Final structured results are cached by the exact local context hash, model, reasoning effort, service tier, and report language.

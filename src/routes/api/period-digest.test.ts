@@ -88,12 +88,31 @@ describe("api period digest route", () => {
 				language: "zh-CN",
 				maxTweets: 42,
 				maxLinks: 7,
-				liveSync: true,
+				liveSync: false,
 				liveSyncMode: "xurl",
 				liveTimelineLimit: undefined,
 				liveTimelineMaxPages: undefined,
 				signal: expect.any(AbortSignal),
 			},
+			expect.objectContaining({ onEvent: expect.any(Function) }),
+		);
+	});
+
+	it("enables bounded live refresh only when requested", async () => {
+		const response = await GET({
+			request: new Request(
+				"http://localhost/api/period-digest?period=24h&liveSync=true&liveMode=xurl",
+			),
+		});
+
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain('"type":"done"');
+		expect(streamPeriodDigestMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				period: "24h",
+				liveSync: true,
+				liveSyncMode: "xurl",
+			}),
 			expect.objectContaining({ onEvent: expect.any(Function) }),
 		);
 	});

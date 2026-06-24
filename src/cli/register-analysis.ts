@@ -103,7 +103,10 @@ export function registerAnalysisCommands({
 			language,
 			maxTweets,
 			maxLinks,
-			liveSync: options.liveSync !== false,
+			liveSync:
+				options.liveSync === false
+					? false
+					: options.liveSync === true || options.liveMode !== undefined,
 			liveSyncMode,
 		};
 	}
@@ -457,12 +460,9 @@ export function registerAnalysisCommands({
 		.option("--refresh", "Bypass the local digest cache")
 		.option("--max-tweets <n>", "Maximum tweet context", "5000")
 		.option("--max-links <n>", "Maximum linked articles", "12")
+		.option("--live-sync", "Refresh live inputs before reading local data")
 		.option("--no-live-sync", "Use only the local database")
-		.option(
-			"--live-mode <mode>",
-			"Live timeline mode: xurl, bird, or auto",
-			"xurl",
-		)
+		.option("--live-mode <mode>", "Live timeline mode: xurl, bird, or auto")
 		.action(async (options) => {
 			await autoUpdateBeforeRead();
 			const digestOptions = buildDigestOptions("today", options);
@@ -485,12 +485,9 @@ export function registerAnalysisCommands({
 		.option("--refresh", "Bypass the local digest cache")
 		.option("--max-tweets <n>", "Maximum tweet context", "5000")
 		.option("--max-links <n>", "Maximum linked articles", "12")
+		.option("--live-sync", "Refresh live inputs before reading local data")
 		.option("--no-live-sync", "Use only the local database")
-		.option(
-			"--live-mode <mode>",
-			"Live timeline mode: xurl, bird, or auto",
-			"xurl",
-		)
+		.option("--live-mode <mode>", "Live timeline mode: xurl, bird, or auto")
 		.action(async (period, options) => {
 			await autoUpdateBeforeRead();
 			const digestOptions = buildDigestOptions(period, options);

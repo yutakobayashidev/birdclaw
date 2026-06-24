@@ -221,6 +221,7 @@ async function runStep({
 				following: true,
 				refresh,
 				cacheTtlMs,
+				earlyStop: true,
 			});
 			return {
 				kind,

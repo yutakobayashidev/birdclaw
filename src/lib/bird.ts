@@ -462,7 +462,25 @@ function parseBirdJsonEffect(stdout: string) {
 
 function normalizeBirdTweetsPayloadEffect(payload: unknown, command: string) {
 	return Effect.try({
-		try: () => normalizeBirdTweets(getBirdTweetItems(payload, command)),
+		try: () => {
+			const normalized = normalizeBirdTweets(
+				getBirdTweetItems(payload, command),
+			);
+			if (
+				payload &&
+				typeof payload === "object" &&
+				typeof (payload as { nextCursor?: unknown }).nextCursor === "string"
+			) {
+				return {
+					...normalized,
+					meta: {
+						...normalized.meta,
+						next_token: (payload as { nextCursor: string }).nextCursor,
+					},
+				};
+			}
+			return normalized;
+		},
 		catch: (error) => error,
 	});
 }
@@ -548,18 +566,23 @@ function listTweetsViaBirdCommandEffect({
 	maxResults,
 	all,
 	maxPages,
+	cursor,
 	profileName,
 }: {
 	command: "likes" | "bookmarks";
 	maxResults: number;
 	all?: boolean;
 	maxPages?: number;
+	cursor?: string;
 	profileName?: string;
 }): Effect.Effect<XurlMentionsResponse, unknown> {
 	return Effect.gen(function* () {
 		const args = [command, "-n", String(maxResults), "--json"];
 		if (all) {
 			args.push("--all");
+		}
+		if (cursor !== undefined) {
+			args.push("--cursor", cursor);
 		}
 		if (maxPages !== undefined) {
 			args.push("--max-pages", String(maxPages));
@@ -578,6 +601,7 @@ export function listLikedTweetsViaBirdEffect(options: {
 	maxResults: number;
 	all?: boolean;
 	maxPages?: number;
+	cursor?: string;
 	profileName?: string;
 }): Effect.Effect<XurlMentionsResponse, unknown> {
 	return listTweetsViaBirdCommandEffect({
@@ -590,6 +614,7 @@ export function listLikedTweetsViaBird(options: {
 	maxResults: number;
 	all?: boolean;
 	maxPages?: number;
+	cursor?: string;
 }): Promise<XurlMentionsResponse> {
 	return runEffectPromise(listLikedTweetsViaBirdEffect(options));
 }
@@ -598,6 +623,7 @@ export function listBookmarkedTweetsViaBirdEffect(options: {
 	maxResults: number;
 	all?: boolean;
 	maxPages?: number;
+	cursor?: string;
 	profileName?: string;
 }): Effect.Effect<XurlMentionsResponse, unknown> {
 	return listTweetsViaBirdCommandEffect({
@@ -610,6 +636,7 @@ export function listBookmarkedTweetsViaBird(options: {
 	maxResults: number;
 	all?: boolean;
 	maxPages?: number;
+	cursor?: string;
 }): Promise<XurlMentionsResponse> {
 	return runEffectPromise(listBookmarkedTweetsViaBirdEffect(options));
 }
@@ -736,14 +763,29 @@ export function lookupTweetsByIdsViaBird(
 export function listHomeTimelineViaBirdEffect({
 	maxResults,
 	following = true,
+	all,
+	maxPages,
+	cursor,
 	profileName,
 }: {
 	maxResults: number;
 	following?: boolean;
+	all?: boolean;
+	maxPages?: number;
+	cursor?: string;
 	profileName?: string;
 }): Effect.Effect<XurlMentionsResponse, unknown> {
 	return Effect.gen(function* () {
 		const args = ["home", "-n", String(maxResults), "--json"];
+		if (all) {
+			args.push("--all");
+		}
+		if (cursor !== undefined) {
+			args.push("--cursor", cursor);
+		}
+		if (maxPages !== undefined) {
+			args.push("--max-pages", String(maxPages));
+		}
 		if (following) {
 			args.push("--following");
 		}
@@ -760,6 +802,9 @@ export function listHomeTimelineViaBirdEffect({
 export function listHomeTimelineViaBird(options: {
 	maxResults: number;
 	following?: boolean;
+	all?: boolean;
+	maxPages?: number;
+	cursor?: string;
 }): Promise<XurlMentionsResponse> {
 	return runEffectPromise(listHomeTimelineViaBirdEffect(options));
 }

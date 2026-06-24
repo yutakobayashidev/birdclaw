@@ -746,7 +746,52 @@ describe("live timeline collection sync", () => {
 		});
 	});
 
-	it("does not pass the implicit early-stop cap to auto bird sync", async () => {
+	it("stops bird collection sync when an early-stop page is saturated", async () => {
+		setupTempHome();
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		insertCollectionRow({ tweetId: "liked_existing_boundary", kind: "likes" });
+		mocks.listLikedTweetsViaBird.mockResolvedValue({
+			data: [makeTweet("liked_existing_boundary", "existing like", "43")],
+			includes: {
+				users: [{ id: "43", username: "amelia", name: "Amelia" }],
+			},
+			meta: { result_count: 1, next_token: "older-likes" },
+		});
+		const { syncTimelineCollection } =
+			await import("./timeline-collections-live");
+
+		const result = await syncTimelineCollection({
+			kind: "likes",
+			mode: "bird",
+			limit: 5,
+			all: true,
+			maxPages: 3,
+			earlyStop: true,
+			refresh: true,
+		});
+
+		expect(result).toMatchObject({
+			ok: true,
+			source: "bird",
+			count: 0,
+			saturated_at_page: 1,
+		});
+		expect(mocks.listLikedTweetsViaBird).toHaveBeenCalledTimes(1);
+		expect(mocks.listLikedTweetsViaBird).toHaveBeenCalledWith({
+			maxResults: 5,
+			all: true,
+			maxPages: 1,
+		});
+		expect(mocks.listLikedTweetsViaXurl).not.toHaveBeenCalled();
+		expect(consoleError).toHaveBeenCalledWith(
+			"likes saturated at page 1 (100% existing rows)",
+		);
+		consoleError.mockRestore();
+	});
+
+	it("uses one bird page for early-stop syncs without an explicit page count", async () => {
 		setupTempHome();
 		const consoleError = vi
 			.spyOn(console, "error")
@@ -772,8 +817,8 @@ describe("live timeline collection sync", () => {
 		expect(result).toMatchObject({ ok: true, source: "bird", count: 1 });
 		expect(mocks.listBookmarkedTweetsViaBird).toHaveBeenCalledWith({
 			maxResults: 5,
-			all: false,
-			maxPages: undefined,
+			all: true,
+			maxPages: 1,
 		});
 		expect(mocks.listBookmarkedTweetsViaXurl).not.toHaveBeenCalled();
 		consoleError.mockRestore();

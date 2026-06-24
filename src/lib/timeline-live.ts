@@ -40,6 +40,7 @@ export interface SyncHomeTimelineOptions {
 	refresh?: boolean;
 	cacheTtlMs?: number;
 	timeoutMs?: number;
+	earlyStop?: boolean;
 	onProgress?: (progress: HomeTimelineProgress) => void;
 }
 
@@ -134,6 +135,38 @@ function mergeHomeTimelineIntoLocalStore(
 	});
 }
 
+function getHomePageExistingTweetIds(
+	db: Database,
+	accountId: string,
+	tweetIds: string[],
+) {
+	const uniqueTweetIds = [...new Set(tweetIds)];
+	if (uniqueTweetIds.length === 0) return new Set<string>();
+	const rows = db
+		.prepare(
+			`
+      select tweet_id
+      from tweet_account_edges
+      where account_id = ?
+        and kind = 'home'
+        and tweet_id in (${uniqueTweetIds.map(() => "?").join(", ")})
+      `,
+		)
+		.all(accountId, ...uniqueTweetIds) as { tweet_id: string }[];
+	return new Set(rows.map((row) => row.tweet_id));
+}
+
+function filterExistingTimelineTweets(
+	payload: XurlMentionsResponse,
+	existingTweetIds: Set<string>,
+) {
+	if (existingTweetIds.size === 0) return payload;
+	return {
+		...payload,
+		data: payload.data.filter((tweet) => !existingTweetIds.has(tweet.id)),
+	};
+}
+
 export function syncHomeTimelineEffect({
 	account,
 	mode,
@@ -144,6 +177,7 @@ export function syncHomeTimelineEffect({
 	refresh = false,
 	cacheTtlMs,
 	timeoutMs,
+	earlyStop = false,
 	onProgress,
 }: SyncHomeTimelineOptions = {}): Effect.Effect<
 	{
@@ -182,7 +216,9 @@ export function syncHomeTimelineEffect({
 		const resolvedAccount = resolveLiveSyncAccount(db, account);
 		const accountId = resolvedAccount.accountId;
 		const effectiveMode = parsedMode === "auto" ? "bird" : parsedMode;
-		const cacheKey = `timeline:${effectiveMode}:${accountId}:${following ? "following" : "for-you"}:${Number.isFinite(effectiveLimit) ? String(effectiveLimit) : "all"}:${Number.isFinite(parsedMaxPages) ? String(parsedMaxPages) : "all-pages"}:${parsedStartTime?.iso ?? "no-start"}`;
+		const useBirdEarlyStop =
+			effectiveMode === "bird" && earlyStop && following && !parsedStartTime;
+		const cacheKey = `timeline:${effectiveMode}:${accountId}:${following ? "following" : "for-you"}:${Number.isFinite(effectiveLimit) ? String(effectiveLimit) : "all"}:${Number.isFinite(parsedMaxPages) ? String(parsedMaxPages) : "all-pages"}:${parsedStartTime?.iso ?? "no-start"}${useBirdEarlyStop ? ":early-stop" : ""}`;
 		const fetchViaXurl = Effect.gen(function* () {
 			if (!following) {
 				return yield* Effect.fail(
@@ -232,13 +268,67 @@ export function syncHomeTimelineEffect({
 			});
 			return mergeTimelinePayloads(result.pages, effectiveLimit);
 		});
-		const fetchViaBird = liveTransportGateway.bird.listHomeTimeline({
-			maxResults: finiteFallbackLimit,
-			following,
-			...(resolvedAccount.birdProfileName
-				? { profileName: resolvedAccount.birdProfileName }
-				: {}),
-		});
+		const fetchViaBird = useBirdEarlyStop
+			? Effect.gen(function* () {
+					const result = yield* runSyncPlanEffect({
+						fetchPage: ({ cursor }) =>
+							liveTransportGateway.bird
+								.listHomeTimeline({
+									maxResults: finiteFallbackLimit,
+									following,
+									all: true,
+									maxPages: 1,
+									...(cursor ? { cursor } : {}),
+									...(resolvedAccount.birdProfileName
+										? { profileName: resolvedAccount.birdProfileName }
+										: {}),
+								})
+								.pipe(
+									Effect.map((payload) => {
+										const existingTweetIds = getHomePageExistingTweetIds(
+											db,
+											accountId,
+											payload.data.map((tweet) => tweet.id),
+										);
+										return {
+											payload,
+											persistedPayload: filterExistingTimelineTweets(
+												payload,
+												existingTweetIds,
+											),
+											boundary: existingTweetIds.size > 0,
+										};
+									}),
+								),
+						getItemCount: (page) => page.payload.data.length,
+						getNextCursor: (page) =>
+							typeof page.payload.meta?.next_token === "string"
+								? page.payload.meta.next_token
+								: undefined,
+						maxPages: parsedMaxPages,
+						shouldStop: ({ page }) => page.boundary,
+						onPage: ({ fetched, pageNumber, done }) =>
+							onProgress?.({
+								source: "bird",
+								fetched,
+								total: finiteFallbackLimit,
+								page: pageNumber,
+								maxPages: parsedMaxPages,
+								done,
+							}),
+					});
+					return mergeTimelinePayloads(
+						result.pages.map((page) => page.persistedPayload),
+						finiteFallbackLimit,
+					);
+				})
+			: liveTransportGateway.bird.listHomeTimeline({
+					maxResults: finiteFallbackLimit,
+					following,
+					...(resolvedAccount.birdProfileName
+						? { profileName: resolvedAccount.birdProfileName }
+						: {}),
+				});
 		const transports =
 			effectiveMode === "xurl"
 				? [createLiveTransportAdapter("xurl", fetchViaXurl)]
@@ -271,7 +361,7 @@ export function syncHomeTimelineEffect({
 				}),
 			);
 		}
-		if (source === "bird") {
+		if (source === "bird" && !useBirdEarlyStop) {
 			yield* Effect.sync(() =>
 				onProgress?.({
 					source: "bird",

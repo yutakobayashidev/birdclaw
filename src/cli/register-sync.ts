@@ -30,6 +30,10 @@ export function registerSyncCommands({
 		.option("--limit <n>", "Result limit", "100")
 		.option("--max-pages <n>", "Stop after N xurl pages", "3")
 		.option("--for-you", 'Fetch "For You" instead of chronological Following')
+		.option(
+			"--early-stop",
+			"Stop bird Following sync when it reaches local rows",
+		)
 		.option("--cache-ttl <seconds>", "Live-cache freshness window", "120")
 		.option("--refresh", "Bypass live-cache freshness window")
 		.action(async (options) => {
@@ -41,6 +45,7 @@ export function registerSyncCommands({
 				following: !options.forYou,
 				refresh: Boolean(options.refresh),
 				cacheTtlMs: Number(options.cacheTtl) * 1000,
+				earlyStop: Boolean(options.earlyStop),
 			});
 			await autoSyncAfterWrite();
 			print(result, true);

@@ -111,6 +111,7 @@ birdclaw debug transport
 - supports `OPENAI_BASE_URL` for OpenAI-compatible endpoints
 - excludes DMs unless `--include-dms` is passed
 - supports `--refresh`, `--model`, `--language <locale-id>`, `--max-tweets`, and `--max-links`
+- reads local SQLite by default; pass `--live-sync` or `--live-mode xurl` for an explicit bounded live refresh before analysis
 - reads the default report language from `BIRDCLAW_DIGEST_LANGUAGE`
 
 ### `digest [period]`
@@ -119,6 +120,7 @@ birdclaw debug transport
 - accepts explicit `--since <iso>` and `--until <iso>` windows
 - caches the final structured result by local context hash, model, reasoning effort, service tier, and canonical report language
 - accepts the same language tag through `GET /api/period-digest?language=zh-CN`
+- `GET /api/period-digest` also reads local SQLite by default; pass `liveSync=true&liveMode=xurl` only for explicit bounded live refreshes
 - `--json` suppresses token streaming and emits the final envelope
 
 ### `init`

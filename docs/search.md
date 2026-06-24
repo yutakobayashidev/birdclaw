@@ -7,6 +7,10 @@ description: "FTS5 search across archived and live-synced tweets and DMs."
 
 birdclaw indexes every tweet and DM in SQLite FTS5. Search runs locally, returns instantly, and works offline.
 
+For bird-first operation, keep the database fresh with `birdclaw jobs sync-account`
+or the matching `sync` commands, then search locally. Local date windows are
+filters over rows already stored in SQLite; they are not live historical reads.
+
 ## Search tweets
 
 ```bash

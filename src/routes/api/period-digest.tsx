@@ -20,6 +20,16 @@ function parseBoolean(value: string | null) {
 	return value === "true" || value === "1" || value === "yes";
 }
 
+function parseLiveMode(
+	value: string | null,
+): PeriodDigestOptions["liveSyncMode"] {
+	const normalized = (value ?? "xurl").trim().toLowerCase();
+	if (normalized === "auto" || normalized === "bird" || normalized === "xurl") {
+		return normalized;
+	}
+	throw new Error("liveMode must be auto, bird, or xurl");
+}
+
 function parseOptions(url: URL): PeriodDigestOptions {
 	return {
 		period: url.searchParams.get("period") ?? undefined,
@@ -38,8 +48,8 @@ function parseOptions(url: URL): PeriodDigestOptions {
 		maxLinks: parseBoundedInteger(url.searchParams.get("maxLinks"), {
 			max: 25,
 		}),
-		liveSync: url.searchParams.get("liveSync") !== "false",
-		liveSyncMode: "xurl",
+		liveSync: parseBoolean(url.searchParams.get("liveSync")),
+		liveSyncMode: parseLiveMode(url.searchParams.get("liveMode")),
 		liveTimelineLimit: parseBoundedInteger(
 			url.searchParams.get("liveTimelineLimit"),
 			{ max: 100_000 },

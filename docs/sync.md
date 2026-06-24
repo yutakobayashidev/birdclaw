@@ -59,7 +59,7 @@ birdclaw sync likes --mode auto --limit 100 --max-pages 5 --early-stop --refresh
 
 Liked tweets land in the same `tweets` table as archive imports and can be queried with `birdclaw search tweets --liked`.
 
-`--early-stop` only applies in explicit `--mode xurl`. It halts pagination as soon as one fetched page is 100% already in the local store. Pair it with `--max-pages` on a cron loop: the first run after a long absence walks back as far as `--max-pages` allows, every subsequent run stops at the first saturated page and spends one X API page read instead of `--max-pages` of them. If neither `--all` nor `--max-pages` is present, Birdclaw applies a 10-page cap.
+`--early-stop` halts pagination as soon as one fetched page is 100% already in the local store. Pair it with `--max-pages` on a cron loop: the first run after a long absence walks back as far as `--max-pages` allows, every subsequent run stops at the first saturated page and spends one page read instead of `--max-pages` of them. In xurl mode, if neither `--all` nor `--max-pages` is present, Birdclaw applies a 10-page cap. In bird mode, an uncapped early-stop run fetches one page.
 
 ## sync bookmarks
 
@@ -73,7 +73,7 @@ birdclaw sync bookmarks --mode auto --limit 100 --max-pages 5 --early-stop --ref
 
 Bookmarks are queried via `birdclaw search tweets --bookmarked` and drive the [research](research.md) workflow.
 
-`--early-stop` behaves the same way as on `sync likes`: stop paging when a full page is already locally known. Recommended default for any scheduled bookmark sync against a stable account.
+`--early-stop` behaves the same way as on `sync likes`: stop paging when a full page is already locally known. It applies to both xurl and bird collection syncs; bird syncs walk one page at a time so scheduled jobs do not keep paging through already-local likes/bookmarks. Recommended default for any scheduled bookmark sync against a stable account.
 
 ## sync timeline
 
@@ -83,7 +83,7 @@ Pull the chronological Following timeline through `bird`:
 birdclaw sync timeline --limit 100 --refresh --json
 ```
 
-`sync timeline` defaults to the chronological feed, not the algorithmic For You. The home timeline is stored in the same `tweets` table so search, filters, and the web UI's `Home` lane all see one set of rows.
+`sync timeline` defaults to the chronological feed, not the algorithmic For You. The home timeline is stored in the same `tweets` table so search, filters, and the web UI's `Home` lane all see one set of rows. Pass `--early-stop` on bird Following syncs to walk one page at a time and stop once a fetched page reaches rows already present in the local home timeline. Scheduled account sync enables that path by default.
 
 ## sync mentions
 
