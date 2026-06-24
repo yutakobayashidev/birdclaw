@@ -196,15 +196,14 @@ describe("cached live mentions", () => {
 		]);
 	});
 
-	it("falls back from xurl to bird in auto mention sync", async () => {
+	it("uses bird directly in auto mention sync without spending xurl", async () => {
 		makeTempHome();
-		listMentionsViaXurlMock.mockRejectedValueOnce(new Error("xurl down"));
 		listMentionsViaBirdMock.mockResolvedValueOnce({
 			data: [
 				{
-					id: "tweet_auto_fallback",
+					id: "tweet_auto_bird",
 					author_id: "42",
-					text: "auto fallback",
+					text: "auto bird",
 					created_at: "2026-03-09T02:00:00.000Z",
 				},
 			],
@@ -223,7 +222,7 @@ describe("cached live mentions", () => {
 		});
 
 		expect(result).toMatchObject({ source: "bird", count: 1 });
-		expect(listMentionsViaXurlMock).toHaveBeenCalledTimes(1);
+		expect(listMentionsViaXurlMock).not.toHaveBeenCalled();
 		expect(listMentionsViaBirdMock).toHaveBeenCalledTimes(1);
 
 		listMentionsViaXurlMock.mockResolvedValueOnce({
@@ -245,15 +244,15 @@ describe("cached live mentions", () => {
 			account: "acct_primary",
 			mode: "xurl",
 			limit: 5,
+			refresh: true,
 		});
 
 		expect(explicitXurl).toMatchObject({ source: "xurl", count: 1 });
-		expect(listMentionsViaXurlMock).toHaveBeenCalledTimes(2);
+		expect(listMentionsViaXurlMock).toHaveBeenCalledTimes(1);
 	});
 
-	it("rejects bird auto fallback when the authenticated bird account mismatches", async () => {
+	it("rejects auto bird sync when the authenticated bird account mismatches", async () => {
 		makeTempHome();
-		listMentionsViaXurlMock.mockRejectedValueOnce(new Error("xurl down"));
 		getAuthenticatedBirdAccountMock.mockResolvedValueOnce({
 			id: "25401953",
 			username: "steipete",
@@ -270,16 +269,17 @@ describe("cached live mentions", () => {
 		).rejects.toThrow(
 			"bird is authenticated as @steipete; refusing to sync into acct_studio (@birdclaw_lab)",
 		);
+		expect(listMentionsViaXurlMock).not.toHaveBeenCalled();
 		expect(listMentionsViaBirdMock).not.toHaveBeenCalled();
 	});
 
-	it("does not use one-page bird fallback for paged auto mention exports", async () => {
+	it("does not use bird fallback for paged explicit xurl mention exports", async () => {
 		makeTempHome();
 		listMentionsViaXurlMock.mockRejectedValueOnce(new Error("xurl down"));
-		const { exportMentionsViaCachedAuto } = await import("./mentions-live");
+		const { exportMentionsViaCachedXurl } = await import("./mentions-live");
 
 		await expect(
-			exportMentionsViaCachedAuto({
+			exportMentionsViaCachedXurl({
 				account: "acct_primary",
 				limit: 5,
 				all: true,

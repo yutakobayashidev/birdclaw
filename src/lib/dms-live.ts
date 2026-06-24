@@ -713,10 +713,15 @@ export function syncDirectMessagesViaCachedBirdEffect({
 			assertXurlLimit(limit);
 		} else {
 			assertBirdLimit(limit);
+			return yield* Effect.fail(
+				new Error(
+					"bird CLI does not support direct messages; use --mode xurl for accepted DMs",
+				),
+			);
 		}
 		if (inbox === "requests" && parsedMode === "xurl") {
 			throw new Error(
-				"xurl DM mode cannot read the message-request inbox or accept/reject state; use --mode bird",
+				"xurl DM mode cannot read the message-request inbox or accept/reject state",
 			);
 		}
 		const db = getNativeDb();
@@ -724,7 +729,7 @@ export function syncDirectMessagesViaCachedBirdEffect({
 		const pageKey = allPages
 			? "all-pages"
 			: `max-pages:${String(maxPages ?? 0)}`;
-		const cacheMode = parsedMode === "auto" ? "auto" : parsedMode;
+		const cacheMode = parsedMode;
 		const cacheKey = `dms:${cacheMode}:${resolvedAccount.accountId}:${String(limit)}:${inbox}:${pageKey}`;
 		const ttlMs = parseCacheTtlMs(cacheTtlMs);
 		const cached = readSyncCache<{
@@ -747,9 +752,7 @@ export function syncDirectMessagesViaCachedBirdEffect({
 		if (cacheHit) {
 			payload = cached.value;
 		} else {
-			const tryXurl =
-				(parsedMode === "xurl" || parsedMode === "auto") &&
-				inbox !== "requests";
+			const tryXurl = parsedMode === "xurl" && inbox !== "requests";
 			if (tryXurl) {
 				const xurlPayload = yield* Effect.gen(function* () {
 					const authenticated = getAuthenticatedXurlAccount(
@@ -792,8 +795,7 @@ export function syncDirectMessagesViaCachedBirdEffect({
 					});
 				}).pipe(
 					Effect.catchAll((error) => {
-						if (parsedMode === "xurl") return Effect.fail(error);
-						return Effect.succeed(undefined);
+						return Effect.fail(error);
 					}),
 				);
 				if (xurlPayload) {
@@ -812,30 +814,9 @@ export function syncDirectMessagesViaCachedBirdEffect({
 				}
 			}
 			if (!payload) {
-				const authenticated =
-					yield* liveTransportGateway.bird.getAuthenticatedAccount();
-				assertAuthenticatedBirdAccountMatches({
-					source: "bird",
-					account: resolvedAccount,
-					liveUsername: authenticated.username,
-					liveExternalUserId: authenticated.id,
-				});
-				accountExternalUserId ??= authenticated.id;
-				if (!resolvedAccount.externalUserId && accountExternalUserId) {
-					persistAccountExternalUserId(
-						db,
-						resolvedAccount.accountId,
-						accountExternalUserId,
-					);
-				}
-				payload = yield* liveTransportGateway.bird.listDirectMessages({
-					maxResults: limit,
-					...(inbox !== "all" ? { inbox } : {}),
-					...(typeof maxPages === "number" ? { maxPages } : {}),
-					...(allPages ? { allPages } : {}),
-					...(typeof pageDelayMs === "number" ? { pageDelayMs } : {}),
-				});
-				source = "bird";
+				return yield* Effect.fail(
+					new Error("No direct message payload returned from xurl"),
+				);
 			}
 		}
 		if (!payload) {

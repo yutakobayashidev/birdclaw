@@ -665,6 +665,7 @@ export const actionRequestSchema = z.discriminatedUnion("kind", [
 		kind: z.literal("replyDm"),
 		conversationId: z.string().default(""),
 		text: z.string().default(""),
+		transport: z.enum(["bird", "xurl"]).optional(),
 	}),
 	z.object({
 		kind: z.literal("scoreInbox"),

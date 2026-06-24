@@ -412,30 +412,23 @@ describe("live home timeline sync", () => {
 		);
 	});
 
-	it("keeps bird imports finite when a selected start time is present", async () => {
+	it("rejects bird imports when a selected start time is present", async () => {
 		makeTempHome();
-		listHomeTimelineViaBirdMock.mockResolvedValueOnce({
-			data: [],
-			meta: { result_count: 0 },
-		});
 		const { syncHomeTimeline } = await import("./timeline-live");
 
-		await syncHomeTimeline({
-			account: "acct_primary",
-			mode: "bird",
-			startTime: "2026-04-26T00:00:00.000Z",
-			refresh: true,
-		});
-
-		expect(listHomeTimelineViaBirdMock).toHaveBeenCalledWith({
-			maxResults: 300,
-			following: true,
-		});
+		await expect(
+			syncHomeTimeline({
+				account: "acct_primary",
+				mode: "bird",
+				startTime: "2026-04-26T00:00:00.000Z",
+				refresh: true,
+			}),
+		).rejects.toThrow("bird home timeline mode does not support --start-time");
+		expect(listHomeTimelineViaBirdMock).not.toHaveBeenCalled();
 	});
 
-	it("falls back to bird for auto mode and rejects xurl for-you imports", async () => {
+	it("uses bird directly for auto mode and rejects xurl for-you imports", async () => {
 		makeTempHome();
-		listHomeTimelineViaXurlMock.mockRejectedValueOnce(new Error("no xurl"));
 		listHomeTimelineViaBirdMock.mockResolvedValueOnce({
 			data: [],
 			meta: { result_count: 0 },
@@ -450,6 +443,7 @@ describe("live home timeline sync", () => {
 				refresh: true,
 			}),
 		).resolves.toMatchObject({ source: "bird" });
+		expect(listHomeTimelineViaXurlMock).not.toHaveBeenCalled();
 		await expect(
 			syncHomeTimeline({
 				account: "acct_primary",
@@ -461,9 +455,8 @@ describe("live home timeline sync", () => {
 		).rejects.toThrow("xurl home timeline mode does not support --for-you");
 	});
 
-	it("does not fall back to bird for non-default account auto syncs", async () => {
+	it("uses bird directly for non-default account auto syncs", async () => {
 		makeTempHome();
-		listHomeTimelineViaXurlMock.mockRejectedValueOnce(new Error("no xurl"));
 		listHomeTimelineViaBirdMock.mockResolvedValueOnce({
 			data: [],
 			meta: { result_count: 0 },
@@ -477,7 +470,8 @@ describe("live home timeline sync", () => {
 				limit: 5,
 				refresh: true,
 			}),
-		).rejects.toThrow("no xurl");
-		expect(listHomeTimelineViaBirdMock).not.toHaveBeenCalled();
+		).resolves.toMatchObject({ source: "bird" });
+		expect(listHomeTimelineViaXurlMock).not.toHaveBeenCalled();
+		expect(listHomeTimelineViaBirdMock).toHaveBeenCalledTimes(1);
 	});
 });

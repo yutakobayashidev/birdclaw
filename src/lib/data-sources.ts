@@ -164,15 +164,16 @@ const capabilities: LiveDataSourceCapability[] = [
 	{
 		key: "timeline",
 		label: "Home timeline",
-		primary: "xurl",
-		fallbacks: ["bird"],
+		primary: "bird",
+		fallbacks: ["birdclaw"],
+		notes: "Use explicit xurl mode for start-time bounded backfills.",
 	},
 	{
 		key: "mentions",
 		label: "Mentions",
-		primary: "xurl",
-		fallbacks: ["bird", "birdclaw"],
-		notes: "bird fallback is skipped when a since/start cursor requires xurl.",
+		primary: "bird",
+		fallbacks: ["birdclaw"],
+		notes: "Use explicit xurl mode when since/start cursors are required.",
 	},
 	{
 		key: "search",
@@ -184,9 +185,10 @@ const capabilities: LiveDataSourceCapability[] = [
 	{
 		key: "dms",
 		label: "DMs",
-		primary: "xurl",
-		fallbacks: ["bird", "birdclaw"],
-		notes: "message requests require bird.",
+		primary: "birdclaw",
+		fallbacks: ["xurl"],
+		notes:
+			"Current bird CLI lacks DMs; explicit xurl mode can import accepted DM events.",
 	},
 	{
 		key: "follow-graph",

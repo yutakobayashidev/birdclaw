@@ -163,12 +163,16 @@ export function syncHomeTimelineEffect({
 			catch: (error) => error,
 		});
 		const parsedMode = parseMode(mode);
+		if (parsedStartTime && parsedMode !== "xurl") {
+			return yield* Effect.fail(
+				new Error(
+					"bird home timeline mode does not support --start-time; use --mode xurl",
+				),
+			);
+		}
 		const finiteFallbackLimit = limit ?? (parsedStartTime ? 300 : 100);
 		const effectiveLimit =
-			limit ??
-			(parsedStartTime && (parsedMode === "xurl" || parsedMode === "auto")
-				? Infinity
-				: finiteFallbackLimit);
+			limit ?? (parsedStartTime ? Infinity : finiteFallbackLimit);
 		assertLimit(effectiveLimit);
 		const parsedMaxPages =
 			maxPages === undefined && parsedStartTime
@@ -177,12 +181,7 @@ export function syncHomeTimelineEffect({
 		const db = getNativeDb();
 		const resolvedAccount = resolveLiveSyncAccount(db, account);
 		const accountId = resolvedAccount.accountId;
-		const effectiveMode =
-			parsedMode === "auto" &&
-			account !== undefined &&
-			!resolvedAccount.isDefault
-				? "xurl"
-				: parsedMode;
+		const effectiveMode = parsedMode === "auto" ? "bird" : parsedMode;
 		const cacheKey = `timeline:${effectiveMode}:${accountId}:${following ? "following" : "for-you"}:${Number.isFinite(effectiveLimit) ? String(effectiveLimit) : "all"}:${Number.isFinite(parsedMaxPages) ? String(parsedMaxPages) : "all-pages"}:${parsedStartTime?.iso ?? "no-start"}`;
 		const fetchViaXurl = Effect.gen(function* () {
 			if (!following) {
@@ -240,12 +239,7 @@ export function syncHomeTimelineEffect({
 		const transports =
 			effectiveMode === "xurl"
 				? [createLiveTransportAdapter("xurl", fetchViaXurl)]
-				: effectiveMode === "bird"
-					? [createLiveTransportAdapter("bird", fetchViaBird)]
-					: [
-							createLiveTransportAdapter("xurl", fetchViaXurl),
-							createLiveTransportAdapter("bird", fetchViaBird),
-						];
+				: [createLiveTransportAdapter("bird", fetchViaBird)];
 		const syncResult = yield* runCachedLiveSyncEffect({
 			db,
 			cacheKey,

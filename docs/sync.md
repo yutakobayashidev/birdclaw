@@ -7,7 +7,7 @@ description: "Sync authored tweets, likes, bookmarks, home timeline, mentions, a
 
 `birdclaw sync` mirrors the live Twitter surfaces you actually use into the local SQLite store. Every sync command:
 
-- pulls from the best live transport for the surface; authored sync uses `xurl`, follow graph sync prefers `bird`, and likes/bookmarks still try `xurl` before `bird`
+- pulls from the preferred live transport for the surface; authored sync uses `xurl`, while timeline, mentions, likes, bookmarks, and follow graph default to `bird`
 - writes into the same canonical tables that archive import uses
 - refreshes the FTS5 index incrementally
 - saves cursors so the next run resumes where the last one stopped
@@ -19,7 +19,7 @@ On a fresh database, import your X archive before the first live sync. The archi
 
 Most `sync *` commands accept:
 
-- `--mode auto|xurl|bird` — transport selection; `auto` chooses the preferred transport for that command and falls back when possible
+- `--mode auto|xurl|bird` — transport selection; `auto` chooses the preferred transport for that command. `xurl` is used only when explicitly selected or required by the command.
 - `--limit <n>` — page size in `xurl` mode, total in single-page modes
 - `--all` — keep paginating until the retrievable window is exhausted
 - `--max-pages <n>` — cap a paged scan; implies `--all`
@@ -58,7 +58,7 @@ birdclaw sync likes --mode auto --limit 100 --max-pages 5 --early-stop --refresh
 
 Liked tweets land in the same `tweets` table as archive imports and can be queried with `birdclaw search tweets --liked`.
 
-`--early-stop` halts pagination as soon as one fetched page is 100% already in the local store. Pair it with `--max-pages` on a cron loop: the first run after a long absence walks back as far as `--max-pages` allows, every subsequent run stops at the first saturated page and spends one X API page read instead of `--max-pages` of them. If neither `--all` nor `--max-pages` is present, Birdclaw applies a 10-page cap.
+`--early-stop` only applies in explicit `--mode xurl`. It halts pagination as soon as one fetched page is 100% already in the local store. Pair it with `--max-pages` on a cron loop: the first run after a long absence walks back as far as `--max-pages` allows, every subsequent run stops at the first saturated page and spends one X API page read instead of `--max-pages` of them. If neither `--all` nor `--max-pages` is present, Birdclaw applies a 10-page cap.
 
 ## sync bookmarks
 
@@ -96,7 +96,7 @@ birdclaw sync mentions --mode bird --limit 50 --json
 Flags:
 
 - `--account <accountId>` — pick the account when multiple are configured
-- `--mode bird|xurl` — transport; defaults to `xurl`
+- `--mode bird|xurl|auto` — transport; defaults to `bird` through `auto`
 - `--limit <n>` — page size
 - `--max-pages <n>` — cap a paged scan; partial truncation exits with code `5`
 - `--since-id <id>` — explicitly fetch mentions newer than a known tweet ID
@@ -104,7 +104,7 @@ Flags:
 - `--refresh` — bypass the live-cache freshness window
 - `--cache-ttl <seconds>` — tune the live-cache freshness window (default `120`)
 
-On a first xurl run without `--since-id` or `--start-time`, Birdclaw seeds `since_id` from the newest archive/legacy mention row for that account so archive-backed stores do not re-fetch old mentions. Live-only mention edges are not used as a baseline because they may be partial. Use `--start-time` for deliberate historical backfills; an explicit `--since-id` always wins.
+On an explicit xurl run without `--since-id` or `--start-time`, Birdclaw seeds `since_id` from the newest archive/legacy mention row for that account so archive-backed stores do not re-fetch old mentions. Live-only mention edges are not used as a baseline because they may be partial. Use `--mode xurl --start-time` for deliberate historical backfills; an explicit `--since-id` always wins. Bird mode does not support `--since-id` or `--start-time`.
 
 `sync mentions` and [`mentions export`](mentions.md) are now distinct: `sync mentions` is the ingest, `mentions export` is the DB-backed export-to-script view. Run `sync mentions` first, then [`sync mention-threads`](#sync-mention-threads) to backfill parent/root conversation context.
 
@@ -156,11 +156,10 @@ birdclaw sync all --transport auto
 
 ## DMs sync
 
-DMs sit on a separate command. `bird` is still the default and required for message-request state; `xurl` can import recent OAuth2 DM events for accepted conversations:
+DMs sit on a separate command. The current `bird` CLI does not expose DM reads or message-request mutations, so live DM sync must be explicitly xurl and only covers recent accepted OAuth2 DM events:
 
 ```bash
-birdclaw dms sync --limit 50 --refresh --json
-birdclaw dms sync --mode auto --limit 50 --refresh --json
+birdclaw dms sync --mode xurl --limit 50 --refresh --json
 birdclaw dms list --refresh --limit 10 --json
 ```
 

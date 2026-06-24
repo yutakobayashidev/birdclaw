@@ -116,7 +116,7 @@ Reply from the CLI:
 ```bash
 birdclaw compose post "Ship local software."
 birdclaw compose reply 1891234567890 "On it."
-birdclaw compose dm dm_003 "Send it over."
+birdclaw compose dm dm_003 "Send it over." --transport xurl
 ```
 
 ## 7. Back up locally
