@@ -594,6 +594,7 @@ export interface XurlMentionsResponse {
 	data: XurlMentionData[];
 	includes?: {
 		users?: XurlMentionUser[];
+		tweets?: XurlTweetData[];
 		media?: XurlMediaItem[];
 	};
 	meta?: Record<string, unknown>;
@@ -624,6 +625,7 @@ export interface XurlTweetsResponse {
 	data: XurlTweetData[];
 	includes?: {
 		users?: XurlMentionUser[];
+		tweets?: XurlTweetData[];
 		media?: XurlMediaItem[];
 	};
 	meta?: Record<string, unknown>;

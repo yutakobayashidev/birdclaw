@@ -94,6 +94,7 @@ function mergeTimelinePayloads(
 ) {
 	const data: XurlMentionsResponse["data"] = [];
 	const usersById = new Map<string, XurlMentionUser>();
+	const tweetsById = new Map<string, XurlMentionsResponse["data"][number]>();
 	const mediaByKey = new Map<string, XurlMediaItem>();
 	let meta: XurlMentionsResponse["meta"] | undefined;
 
@@ -107,6 +108,9 @@ function mergeTimelinePayloads(
 		for (const user of payload.includes?.users ?? []) {
 			usersById.set(user.id, user);
 		}
+		for (const tweet of payload.includes?.tweets ?? []) {
+			tweetsById.set(tweet.id, tweet);
+		}
 		for (const media of payload.includes?.media ?? []) {
 			mediaByKey.set(media.media_key, media);
 		}
@@ -117,6 +121,7 @@ function mergeTimelinePayloads(
 		data,
 		includes: {
 			users: [...usersById.values()],
+			tweets: [...tweetsById.values()],
 			media: [...mediaByKey.values()],
 		},
 		meta,
