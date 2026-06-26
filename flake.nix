@@ -20,7 +20,7 @@
             inherit system;
             pkgs = import inputs.nixpkgs {
               inherit system;
-              overlays = [ inputs.self.overlays.default ];
+              overlays = [ self.overlays.default ];
             };
           }
         );
@@ -29,7 +29,21 @@
       overlays.default = final: prev: rec {
         nodejs = prev.nodejs;
         yarn = (prev.yarn.override { inherit nodejs; });
+        birdclaw = self.packages.${final.system}.birdclaw;
       };
+
+      packages = forEachSupportedSystem (
+        { system, ... }:
+        let
+          basePkgs = import inputs.nixpkgs { inherit system; };
+        in
+        {
+          default = self.packages.${system}.birdclaw;
+          birdclaw = basePkgs.callPackage ./nix/package.nix {
+            src = self;
+          };
+        }
+      );
 
       devShells = forEachSupportedSystem (
         { pkgs, system }:

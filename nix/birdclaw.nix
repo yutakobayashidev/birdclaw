@@ -7,12 +7,8 @@
 
 let
   cfg = config.services.birdclaw;
-  currentSystemUser = config._module.args.currentSystemUser or null;
   configJson = builtins.toJSON cfg.config;
   generatedConfigPath = pkgs.writeText "birdclaw.config.json" "${configJson}\n";
-
-  homeDir =
-    if currentSystemUser == null && cfg.user == "birdclaw" then cfg.dataDir else "/home/${cfg.user}";
 
   mkCmd =
     args:
@@ -96,6 +92,8 @@ let
       ]
       ++ lib.optionals refresh [ "--refresh" ]
     );
+
+  userHome = config.users.users.${cfg.user}.home or "/home/${cfg.user}";
 in
 {
   options.services.birdclaw = {
@@ -109,19 +107,20 @@ in
 
     user = lib.mkOption {
       type = lib.types.str;
-      default = if currentSystemUser == null then "birdclaw" else currentSystemUser;
-      description = "User account that runs Birdclaw services.";
+      defaultText = "existing system user";
+      description = "User account that runs Birdclaw services. Must be an existing user on the system.";
     };
 
     group = lib.mkOption {
       type = lib.types.str;
-      default = if currentSystemUser == null then "birdclaw" else currentSystemUser;
+      default = cfg.user;
+      defaultText = "<user>";
       description = "Group used by Birdclaw services.";
     };
 
     dataDir = lib.mkOption {
       type = lib.types.str;
-      default = "/srv/birdclaw";
+      defaultText = "/home/<user>/.birdclaw";
       description = "Directory used for Birdclaw data and working state.";
     };
 
@@ -324,17 +323,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    users.users = lib.mkIf (currentSystemUser == null && cfg.user == "birdclaw") {
-      birdclaw = {
-        isSystemUser = true;
-        group = cfg.group;
-        home = cfg.dataDir;
-      };
-    };
-
-    users.groups = lib.mkIf (currentSystemUser == null && cfg.user == "birdclaw") {
-      birdclaw = { };
-    };
+    services.birdclaw.dataDir = lib.mkDefault "${userHome}/.birdclaw";
 
     environment.systemPackages = [ cfg.package ];
 
@@ -355,8 +344,7 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       environment = {
-        HOME =
-          if currentSystemUser == null && cfg.user == "birdclaw" then cfg.dataDir else "/home/${cfg.user}";
+        HOME = userHome;
         BIRDCLAW_HOME = cfg.dataDir;
         BIRDCLAW_ALLOW_REMOTE_WEB = if cfg.allowRemoteWeb then "1" else "0";
         BIRDCLAW_HOST = cfg.host;
@@ -384,7 +372,7 @@ in
         User = cfg.user;
         Group = cfg.group;
         Environment = {
-          HOME = homeDir;
+          HOME = userHome;
           BIRDCLAW_HOME = cfg.dataDir;
           BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
           BIRDCLAW_HOST = cfg.host;
@@ -446,7 +434,7 @@ in
         User = cfg.user;
         Group = cfg.group;
         Environment = {
-          HOME = homeDir;
+          HOME = userHome;
           BIRDCLAW_HOME = cfg.dataDir;
           BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
           BIRDCLAW_HOST = cfg.host;
