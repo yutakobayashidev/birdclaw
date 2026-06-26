@@ -391,8 +391,8 @@ in
         OnBootSec = "1m";
         OnUnitActiveSec = "${toString cfg.jobs.accountSync.intervalSeconds}s";
         Unit = "birdclaw-account-sync.service";
+        Persistent = true;
       };
-      persistent = true;
     };
 
     systemd.user.services.birdclaw-bookmark-sync = lib.mkIf cfg.jobs.bookmarkSync.enable {
@@ -439,8 +439,8 @@ in
         OnBootSec = "1m";
         OnUnitActiveSec = "${toString cfg.jobs.bookmarkSync.intervalSeconds}s";
         Unit = "birdclaw-bookmark-sync.service";
+        Persistent = true;
       };
-      persistent = true;
     };
   };
 }
