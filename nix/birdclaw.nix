@@ -92,36 +92,17 @@ let
       ]
       ++ lib.optionals refresh [ "--refresh" ]
     );
-
-  userHome = config.users.users.${cfg.user}.home or "/home/${cfg.user}";
 in
 {
   options.services.birdclaw = {
     enable = lib.mkEnableOption "Birdclaw local Twitter memory service";
 
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.birdclaw;
-      description = "Birdclaw package to run.";
-    };
-
-    user = lib.mkOption {
-      type = lib.types.str;
-      defaultText = "existing system user";
-      description = "User account that runs Birdclaw services. Must be an existing user on the system.";
-    };
-
-    group = lib.mkOption {
-      type = lib.types.str;
-      default = cfg.user;
-      defaultText = "<user>";
-      description = "Group used by Birdclaw services.";
-    };
+    package = lib.mkPackageOption pkgs "birdclaw" { };
 
     dataDir = lib.mkOption {
       type = lib.types.str;
-      defaultText = "/home/<user>/.birdclaw";
-      description = "Directory used for Birdclaw data and working state.";
+      default = "%h/.birdclaw";
+      description = "Directory used for Birdclaw data. %h resolves to the user's home directory at runtime.";
     };
 
     host = lib.mkOption {
@@ -152,7 +133,7 @@ in
     config = lib.mkOption {
       type = lib.types.attrs;
       default = { };
-      description = "Object written to ${cfg.dataDir}/config.json.";
+      description = "Birdclaw configuration written to dataDir/config.json on first start.";
       example = {
         backup = {
           autoSync = true;
@@ -323,28 +304,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.birdclaw.dataDir = lib.mkDefault "${userHome}/.birdclaw";
-
     environment.systemPackages = [ cfg.package ];
 
-    systemd.tmpfiles.rules = [
-      "d ${cfg.dataDir} 0700 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/audit 0700 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/locks 0700 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/logs 0700 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/media 0700 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/media/originals 0700 ${cfg.user} ${cfg.group} - -"
-      "d ${cfg.dataDir}/media/thumbs 0700 ${cfg.user} ${cfg.group} - -"
-      "L+ ${cfg.dataDir}/config.json 0644 ${cfg.user} ${cfg.group} - ${generatedConfigPath}"
-    ];
-
-    systemd.services.birdclaw = {
+    systemd.user.services.birdclaw = {
       description = "Birdclaw local Twitter memory";
-      wantedBy = [ "multi-user.target" ];
+      wantedBy = [ "default.target" ];
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
       environment = {
-        HOME = userHome;
         BIRDCLAW_HOME = cfg.dataDir;
         BIRDCLAW_ALLOW_REMOTE_WEB = if cfg.allowRemoteWeb then "1" else "0";
         BIRDCLAW_HOST = cfg.host;
@@ -353,9 +320,11 @@ in
       };
       serviceConfig = {
         Type = "simple";
-        User = cfg.user;
-        Group = cfg.group;
         WorkingDirectory = cfg.dataDir;
+        ExecStartPre = [
+          ''${lib.getExe' pkgs.coreutils "mkdir"} -p "${cfg.dataDir}"''
+          ''${lib.getExe pkgs.bash} -c "[ -f ${cfg.dataDir}/config.json ] || ${lib.getExe' pkgs.coreutils "cp"} ${generatedConfigPath} ${cfg.dataDir}/config.json"''
+        ];
         ExecStart = "${lib.getExe' cfg.package "birdclaw"} serve";
         Restart = "always";
         RestartSec = 10;
@@ -365,14 +334,11 @@ in
       };
     };
 
-    systemd.services.birdclaw-account-sync = lib.mkIf cfg.jobs.accountSync.enable {
+    systemd.user.services.birdclaw-account-sync = lib.mkIf cfg.jobs.accountSync.enable {
       description = "Birdclaw account sync scheduler job";
       serviceConfig = {
         Type = "oneshot";
-        User = cfg.user;
-        Group = cfg.group;
         Environment = {
-          HOME = userHome;
           BIRDCLAW_HOME = cfg.dataDir;
           BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
           BIRDCLAW_HOST = cfg.host;
@@ -417,7 +383,7 @@ in
       };
     };
 
-    systemd.timers.birdclaw-account-sync = lib.mkIf cfg.jobs.accountSync.enable {
+    systemd.user.timers.birdclaw-account-sync = lib.mkIf cfg.jobs.accountSync.enable {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "1m";
@@ -427,14 +393,11 @@ in
       persistent = true;
     };
 
-    systemd.services.birdclaw-bookmark-sync = lib.mkIf cfg.jobs.bookmarkSync.enable {
+    systemd.user.services.birdclaw-bookmark-sync = lib.mkIf cfg.jobs.bookmarkSync.enable {
       description = "Birdclaw bookmark sync scheduler job";
       serviceConfig = {
         Type = "oneshot";
-        User = cfg.user;
-        Group = cfg.group;
         Environment = {
-          HOME = userHome;
           BIRDCLAW_HOME = cfg.dataDir;
           BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
           BIRDCLAW_HOST = cfg.host;
@@ -468,7 +431,7 @@ in
       };
     };
 
-    systemd.timers.birdclaw-bookmark-sync = lib.mkIf cfg.jobs.bookmarkSync.enable {
+    systemd.user.timers.birdclaw-bookmark-sync = lib.mkIf cfg.jobs.bookmarkSync.enable {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "1m";
