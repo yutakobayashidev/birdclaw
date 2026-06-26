@@ -180,6 +180,7 @@ export async function runDigestJob({
 			language,
 			maxTweets,
 			maxLinks,
+			citationStyle: "markdown",
 		});
 
 		let notify: DiscordNotifyResult | undefined;

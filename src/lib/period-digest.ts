@@ -49,6 +49,7 @@ export interface PeriodDigestOptions {
 	language?: string;
 	reasoningEffort?: "minimal" | "low" | "medium" | "high";
 	serviceTier?: "default" | "flex" | "priority";
+	citationStyle?: "internal" | "markdown";
 	signal?: AbortSignal;
 	maxTweets?: number;
 	maxLinks?: number;
@@ -994,9 +995,16 @@ function emitCachedDigest(
 	handlers.onEvent?.({ type: "done", result });
 }
 
+function citationInstruction(style?: "internal" | "markdown") {
+	if (style === "markdown") {
+		return "cite every claim at the end of the relevant sentence or bullet using the tweet's \"url\" field as a markdown link, e.g. [tweet_123](https://x.com/handle/status/123), [tweet_456](https://x.com/handle/status/456)";
+	}
+	return "cite every claim with inline tweet ids at the end of the relevant sentence or bullet, e.g. (tweet_123, tweet_456). These citations become hoverable source links.";
+}
+
 function buildPrompt(
 	context: PeriodDigestContext,
-	options?: { language?: string },
+	options?: { language?: string; citationStyle?: "internal" | "markdown" },
 ) {
 	const language = normalizeDigestLanguage(options?.language);
 	const promptTweets = context.tweets.map((tweet) => ({
@@ -1086,7 +1094,7 @@ Requirements:
 - Use sections named "What people are talking about", "Important links shared", and "Worth opening". Add "Worth replying to" only if there are clearly high-signal replies. Translate these section titles when a report language is requested.
 - When a tweet has replyToTweet, use that parent context to understand what the author was replying to and whether Peter already joined the conversation.
 - Use bullets under each section. Each bullet should be specific and explain why it matters.
-- For tweets: cite every claim with inline tweet ids at the end of the relevant sentence or bullet, e.g. (tweet_123, tweet_456). These citations become hoverable source links.
+- For tweets: ${citationInstruction(options?.citationStyle)}
 - For links: emit normal Markdown links with no space between the label and URL, e.g. [title](https://example.com), then cite the sharing tweet ids in the same bullet.
 - Prefer synthesis over chronology. Group repeated chatter into one bullet.
 - Mention handles when useful, but do not make the report a list of handles.
@@ -1169,6 +1177,7 @@ function createOpenAIRequestBody(
 			"You are a precise local Twitter archive analyst. Stream Markdown first, then emit the requested JSON object after the delimiter. Do not invent events not present in the dataset.",
 		prompt: buildPrompt(context, {
 			language: languageFromOptions(options),
+			citationStyle: options.citationStyle,
 		}),
 		stream: true,
 	});
