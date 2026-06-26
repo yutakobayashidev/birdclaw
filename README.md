@@ -211,24 +211,29 @@ http://localhost:3000
 
 ## NixOS Module
 
-Birdclaw now has an in-tree NixOS module so you can set `config.json` and timer jobs from Nix:
+Birdclaw provides a NixOS module that runs `birdclaw serve` and periodic sync jobs as **user-level systemd services** (`systemd --user`). Enable linger so they start at boot:
+
+```bash
+sudo loginctl enable-linger $USER
+```
+
+Add the module to your NixOS config:
 
 ```nix
 {
-  imports = [ self.nixosModules.birdclaw ];
+  imports = [ inputs.birdclaw.nixosModules.birdclaw ];
 
   services.birdclaw = {
     enable = true;
-    dataDir = "/srv/birdclaw";
     host = "127.0.0.1";
     port = 3003;
     allowRemoteWeb = true;
     environmentFiles = [ "/etc/birdclaw/secrets.env" ];
 
-    # Written to /srv/birdclaw/config.json
+    # Written to ~/.birdclaw/config.json on first start
     config = {
       backup = {
-        repoPath = "/srv/birdclaw-backup";
+        repoPath = "/home/yuta/birdclaw-backup";
         remote = "https://github.com/example/backup-birdclaw.git";
         autoSync = true;
         staleAfterSeconds = 900;
@@ -257,6 +262,8 @@ Birdclaw now has an in-tree NixOS module so you can set `config.json` and timer 
   };
 }
 ```
+
+Data (`~/.birdclaw/birdclaw.sqlite`) is shared between the service and `birdclaw` CLI commands run from the shell.
 
 ## Quick Start
 
