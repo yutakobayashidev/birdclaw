@@ -55,7 +55,7 @@ let
 
   mkBookmarkSyncCommand =
     {
-      account,
+      account ? null,
       mode,
       limit,
       maxPages,
