@@ -338,14 +338,14 @@ in
 
     systemd.user.services.birdclaw-account-sync = lib.mkIf cfg.jobs.accountSync.enable {
       description = "Birdclaw account sync scheduler job";
+      environment = {
+        BIRDCLAW_HOME = cfg.dataDir;
+        BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
+        BIRDCLAW_HOST = cfg.host;
+        BIRDCLAW_PORT = toString cfg.port;
+      };
       serviceConfig = {
         Type = "oneshot";
-        Environment = {
-          BIRDCLAW_HOME = cfg.dataDir;
-          BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
-          BIRDCLAW_HOST = cfg.host;
-          BIRDCLAW_PORT = toString cfg.port;
-        };
         EnvironmentFile = cfg.environmentFiles;
         StandardOutput =
           if cfg.jobs.accountSync.stdoutPath != null then
@@ -397,14 +397,14 @@ in
 
     systemd.user.services.birdclaw-bookmark-sync = lib.mkIf cfg.jobs.bookmarkSync.enable {
       description = "Birdclaw bookmark sync scheduler job";
+      environment = {
+        BIRDCLAW_HOME = cfg.dataDir;
+        BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
+        BIRDCLAW_HOST = cfg.host;
+        BIRDCLAW_PORT = toString cfg.port;
+      };
       serviceConfig = {
         Type = "oneshot";
-        Environment = {
-          BIRDCLAW_HOME = cfg.dataDir;
-          BIRDCLAW_CONFIG = "${cfg.dataDir}/config.json";
-          BIRDCLAW_HOST = cfg.host;
-          BIRDCLAW_PORT = toString cfg.port;
-        };
         EnvironmentFile = cfg.environmentFiles;
         StandardOutput =
           if cfg.jobs.bookmarkSync.stdoutPath != null then
