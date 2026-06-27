@@ -125,6 +125,19 @@ describe("period digest", () => {
 		expect(prompt).toContain(context.tweets[0]?.text);
 	});
 
+	it("prefers niche exciting signals over mass-market news in reports", () => {
+		const context = collectPeriodDigestContext({
+			since: "2026-01-01T00:00:00.000Z",
+			until: "2027-01-01T00:00:00.000Z",
+			maxTweets: 20,
+		});
+		const prompt = __test__.buildPrompt(context);
+
+		expect(prompt).toContain(
+			"Prefer niche, exciting, surprising signals over mass-market news",
+		);
+	});
+
 	it("preserves tweet prompt context when auxiliary sections exceed the budget", () => {
 		const context = collectPeriodDigestContext({
 			since: "2026-01-01T00:00:00.000Z",

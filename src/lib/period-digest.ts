@@ -997,7 +997,7 @@ function emitCachedDigest(
 
 function citationInstruction(style?: "internal" | "markdown") {
 	if (style === "markdown") {
-		return "cite every claim at the end of the relevant sentence or bullet using the tweet's \"url\" field as a markdown link, e.g. [tweet_123](https://x.com/handle/status/123), [tweet_456](https://x.com/handle/status/456)";
+		return 'cite every claim at the end of the relevant sentence or bullet using the tweet\'s "url" field as a markdown link, e.g. [tweet_123](https://x.com/handle/status/123), [tweet_456](https://x.com/handle/status/456)';
 	}
 	return "cite every claim with inline tweet ids at the end of the relevant sentence or bullet, e.g. (tweet_123, tweet_456). These citations become hoverable source links.";
 }
@@ -1097,6 +1097,7 @@ Requirements:
 - For tweets: ${citationInstruction(options?.citationStyle)}
 - For links: emit normal Markdown links with no space between the label and URL, e.g. [title](https://example.com), then cite the sharing tweet ids in the same bullet.
 - Prefer synthesis over chronology. Group repeated chatter into one bullet.
+- Prefer niche, exciting, surprising signals over mass-market news, even when the niche item is smaller in raw engagement.
 - Mention handles when useful, but do not make the report a list of handles.
 - Do not include a generic "Action items" section.
 - If there is no data, say that plainly in one short paragraph.
