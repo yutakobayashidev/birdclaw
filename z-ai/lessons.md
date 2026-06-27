@@ -4,3 +4,4 @@
 - When changing a command wrapper to require `profileName`, update both runtime callers and tests together so the new contract is enforced end to end.
 - A configured `bird_profile_name` is not enough for account-scoped sync. Before persisting bird reads, run `bird whoami` for that profile and reject mismatches against the selected Birdclaw account.
 - Status/readiness pages must use the same selected account context as sync and actions; otherwise they report the default account and hide profile configuration problems.
+- Before `commit&push`, verify the target branch with the user or explicit context. If the current feature branch is already merged, switch to `main` and commit there instead of appending to the stale branch.
