@@ -85,6 +85,19 @@ describe("bird transport wrapper", () => {
 						profileImageUrl:
 							"https://pbs.twimg.com/profile_images/42/avatar_normal.jpg",
 					},
+					_raw: {
+						core: {
+							user_results: {
+								result: {
+									rest_id: "42",
+									avatar: {
+										image_url:
+											"https://pbs.twimg.com/profile_images/42/avatar_normal.jpg",
+									},
+								},
+							},
+						},
+					},
 					media: [
 						{
 							type: "photo",
@@ -101,7 +114,7 @@ describe("bird transport wrapper", () => {
 			profileName: PROFILE_NAME,
 		});
 
-		expectBirdCommandCall(1, ["mentions", "-n", "12", "--json"]);
+		expectBirdCommandCall(1, ["mentions", "-n", "12", "--json-full"]);
 		expect(payload).toEqual({
 			data: [
 				expect.objectContaining({
@@ -170,7 +183,67 @@ describe("bird transport wrapper", () => {
 				data: [expect.objectContaining({ id: "tweet_effect_1" })],
 			}),
 		);
-		expectBirdCommandCall(1, ["mentions", "-n", "3", "--json"]);
+		expectBirdCommandCall(1, ["mentions", "-n", "3", "--json-full"]);
+	});
+
+	it("falls back to standard JSON when bird lacks --json-full", async () => {
+		process.env.BIRDCLAW_BIRD_COMMAND = "/tmp/bird";
+		mockBirdRejectOnce(
+			Object.assign(new Error("Command failed"), {
+				stderr: "error: unknown option '--json-full'",
+			}),
+		);
+		mockBirdStdoutOnce("[]");
+		const { listMentionsViaBird } = await import("./bird");
+
+		await expect(
+			listMentionsViaBird({ maxResults: 5, profileName: PROFILE_NAME }),
+		).resolves.toMatchObject({
+				data: [],
+			});
+		expectBirdCommandCall(1, ["mentions", "-n", "5", "--json-full"]);
+		expectBirdCommandCall(2, ["mentions", "-n", "5", "--json"]);
+	});
+
+	it("keeps an avatar found on a later tweet from the same author", async () => {
+		const { __test__ } = await import("./bird");
+
+		expect(
+			__test__.normalizeBirdTweets([
+				{
+					id: "tweet_without_avatar",
+					text: "first",
+					createdAt: "2026-06-24T00:00:00.000Z",
+					authorId: "42",
+					author: { username: "sam", name: "Sam" },
+				},
+				{
+					id: "tweet_with_avatar",
+					text: "second",
+					createdAt: "2026-06-24T00:01:00.000Z",
+					authorId: "42",
+					_raw: {
+						core: {
+							user_results: {
+								result: {
+									rest_id: "42",
+									avatar: { image_url: "https://img.example/sam_normal.jpg" },
+								},
+							},
+						},
+					},
+				},
+			]),
+		).toMatchObject({
+			includes: {
+				users: [
+					{
+						id: "42",
+						profile_image_url: "https://img.example/sam_normal.jpg",
+					},
+				],
+			},
+		});
 	});
 
 	it("omits max-pages for single-page bird search", async () => {
@@ -196,7 +269,7 @@ describe("bird transport wrapper", () => {
 				oldest_id: undefined,
 			},
 		});
-		expectBirdCommandCall(1, ["search", "ChatGPT", "-n", "5", "--json"]);
+		expectBirdCommandCall(1, ["search", "ChatGPT", "-n", "5", "--json-full"]);
 
 		await searchTweetsViaBird("ChatGPT", {
 			maxResults: 5,
@@ -209,10 +282,10 @@ describe("bird transport wrapper", () => {
 			"ChatGPT",
 			"-n",
 			"5",
-			"--json",
 			"--all",
 			"--max-pages",
 			"2",
+			"--json-full",
 		]);
 	});
 
@@ -448,15 +521,15 @@ describe("bird transport wrapper", () => {
 			includes: { users: [{ id: "43", username: "amelia", name: "Amelia" }] },
 			meta: expect.objectContaining({ result_count: 1 }),
 		});
-		expectBirdCommandCall(1, ["likes", "-n", "5", "--json"]);
+		expectBirdCommandCall(1, ["likes", "-n", "5", "--json-full"]);
 		expectBirdCommandCall(2, [
 			"bookmarks",
 			"-n",
 			"7",
-			"--json",
 			"--all",
 			"--max-pages",
 			"2",
+			"--json-full",
 		]);
 	});
 
@@ -486,7 +559,7 @@ describe("bird transport wrapper", () => {
 			includes: { users: [{ id: "45", username: "riley", name: "Riley" }] },
 			meta: expect.objectContaining({ result_count: 1 }),
 		});
-		expectBirdCommandCall(1, ["home", "-n", "9", "--json", "--following"]);
+		expectBirdCommandCall(1, ["home", "-n", "9", "--following", "--json-full"]);
 	});
 
 	it("maps bird user tweets json into xurl user-tweets payloads", async () => {
@@ -676,9 +749,9 @@ describe("bird transport wrapper", () => {
 		expectBirdCommandCall(1, [
 			"thread",
 			"reply_1",
-			"--json",
 			"--max-pages",
 			"2",
+			"--json-full",
 		]);
 		expect(execFileAsyncMock.mock.calls[0]?.[2]).toEqual(
 			expect.objectContaining({ timeout: 5000 }),
@@ -751,7 +824,7 @@ describe("bird transport wrapper", () => {
 			includes: { users: [{ id: "42", username: "sam", name: "Sam" }] },
 			meta: expect.objectContaining({ result_count: 1 }),
 		});
-		expectBirdCommandCall(1, ["read", "tweet_1", "--json"]);
+		expectBirdCommandCall(1, ["read", "tweet_1", "--json-full"]);
 	});
 
 	it("looks up profiles through bird user json", async () => {

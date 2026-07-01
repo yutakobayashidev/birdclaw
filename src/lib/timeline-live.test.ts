@@ -179,6 +179,11 @@ describe("live home timeline sync", () => {
 			source: "bird",
 		});
 		expect(
+			db.prepare("select avatar_url from profiles where handle = ?").get("sam"),
+		).toEqual({
+			avatar_url: "https://pbs.twimg.com/profile_images/42/avatar.jpg",
+		});
+		expect(
 			listTimelineItems({
 				resource: "home",
 				account: "acct_studio",
