@@ -12,6 +12,7 @@
 
 ### Fixed
 
+- Bundle the TanStack Start H3 runtime into production server artifacts so installed npm packages can start without undeclared transitive dependencies.
 - Add completed Today digest PDF export with route-scoped print styling, while excluding partial failed streams. (#77 - thanks @Gatsby1s)
 - Make the Today digest's selected period visually distinct and expose its pressed state to assistive technology. (#72 - thanks @Gatsby1s)
 - Keep backup Git commits inside the configured repository root and pin hashed backup text files to LF line endings. (#79 - thanks @rodriguez46p-ui)
