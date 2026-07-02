@@ -295,7 +295,7 @@ When using bird with a relay profile, attach that profile to the imported accoun
 birdclaw accounts set-bird-profile --account acct_primary --profile-name work
 ```
 
-Optional profile hydration can improve bios, follower counts, and avatars, but it performs live X profile reads and can spend API credits on large archives:
+Optional profile hydration through xurl can improve bios, follower counts, and avatars, but it performs live X profile reads and can spend API credits on large archives. In Bird-only mode, the command corrects the seeded local account identity from `bird whoami` without bulk-hydrating imported profiles:
 
 ```bash
 birdclaw import hydrate-profiles --json
