@@ -653,12 +653,12 @@ function listTweetsViaBirdCommandEffect({
 		const args = [command, "-n", String(maxResults)];
 		if (all) {
 			args.push("--all");
+			if (maxPages !== undefined) {
+				args.push("--max-pages", String(maxPages));
+			}
 		}
 		if (cursor !== undefined) {
 			args.push("--cursor", cursor);
-		}
-		if (maxPages !== undefined) {
-			args.push("--max-pages", String(maxPages));
 		}
 		const stdout = yield* runBirdTweetJsonCommandEffect(args, profileName);
 		const payload = yield* parseBirdJsonEffect(stdout);
