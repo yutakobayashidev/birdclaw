@@ -62,6 +62,9 @@ birdclaw sync mentions
 birdclaw sync mention-threads
 birdclaw sync followers
 birdclaw sync following
+birdclaw sync lists
+birdclaw lists list
+birdclaw lists members [name]
 birdclaw search tweets <query>
 birdclaw search dms <query>
 birdclaw discuss <query>
@@ -284,6 +287,7 @@ birdclaw import archive ~/Downloads/twitter-archive.zip --select followers,follo
 - `sync mentions` ingests recent mentions through `bird` by default, with `xurl` as the explicit fallback, and writes `kind='mention'` rows into the canonical store; this is the cron-friendly ingest path that replaces relying on `mentions export --refresh`
 - `sync mention-threads` fetches conversation context for recent mentions through `bird thread` by default; pass `--mode xurl` when the `bird` CLI is unavailable, otherwise use `--delay-ms` and `--timeout-ms` to stay gentle on live X
 - `sync followers` and `sync following` default to dry-run and require `--yes` for live sync or fresh-cache merge; `auto` prefers `bird`, then falls back to `xurl`
+- `sync lists` is an explicit read-only walk; it defaults to 20 members, one page, and 1,000 ms pacing per List, and stores `complete|inferred|partial|error` membership state
 
 Common flags:
 
@@ -311,6 +315,8 @@ birdclaw sync bookmarks --mode bird --all --max-pages 5 --limit 100 --refresh --
 birdclaw sync timeline --limit 100 --refresh --json
 birdclaw sync mentions --mode xurl --limit 100 --max-pages 3 --refresh --json
 birdclaw sync mention-threads --mode bird --limit 30 --delay-ms 1500 --timeout-ms 15000 --json
+birdclaw sync mention-threads --mode xurl --limit 30 --json
+birdclaw sync lists --mode auto --max-lists 20 --member-limit 20 --max-member-pages 1 --delay-ms 1000 --json
 ```
 
 Follow graph examples:
@@ -397,6 +403,9 @@ birdclaw --json jobs install-bookmarks-launchd --program /opt/homebrew/bin/birdc
 Flags:
 
 - `--author <handle-or-id>`
+- `--account <accountId>`
+- `--list <name>`
+- `--list-id <id>`
 - `--since <date>`
 - `--until <date>`
 - `--originals-only`
@@ -410,6 +419,7 @@ Examples:
 ```bash
 birdclaw search tweets --liked --limit 20 --json
 birdclaw search tweets --bookmarked --limit 20 --json
+birdclaw search tweets "sqlite" --list Builders --limit 50 --json
 ```
 
 ### `search dms <query>`
