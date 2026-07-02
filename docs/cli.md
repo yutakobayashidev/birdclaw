@@ -111,7 +111,7 @@ birdclaw debug transport
 - streams Markdown as model tokens arrive
 - uses `gpt-5.5`, medium reasoning, and priority service tier by default
 - requires `OPENAI_API_KEY`
-- supports `OPENAI_BASE_URL` for OpenAI-compatible endpoints (including a LiteLLM gateway)
+- supports `BIRDCLAW_OPENAI_BASE_URL` for OpenAI-compatible endpoints (including a LiteLLM gateway)
 - excludes DMs unless `--include-dms` is passed
 - supports `--refresh`, `--model`, `--language <locale-id>`, `--max-tweets`, and `--max-links`
 - `--model` is passed through to the endpoint as-is; use LiteLLM model aliases/model groups and set fallback policy in LiteLLM config

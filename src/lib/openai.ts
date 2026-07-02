@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import { runEffectPromise, tryPromise } from "./effect-runtime";
-import { openAIEndpoint } from "./openai-url";
+import { debugLog, resolveOpenAIBaseUrl } from "./openai-response-runtime";
+
+const getEnv = (name: string) => process.env[name];
 
 export interface OpenAIInboxScore {
 	score: number;
@@ -47,8 +49,11 @@ export function scoreInboxItemWithOpenAIEffect(
 		}
 
 		const model = process.env.BIRDCLAW_OPENAI_MODEL || "gpt-5.2";
+		const baseUrl = resolveOpenAIBaseUrl(getEnv);
+		const url = `${baseUrl}/chat/completions`;
+		debugLog(getEnv, `POST ${url} (model=${model})`);
 		const response = yield* tryPromise(() =>
-			fetch(openAIEndpoint("chat/completions", process.env.OPENAI_BASE_URL), {
+			fetch(url, {
 				method: "POST",
 				headers: {
 					authorization: `Bearer ${apiKey}`,
@@ -70,11 +75,24 @@ export function scoreInboxItemWithOpenAIEffect(
 					],
 				}),
 			}),
-		).pipe(Effect.mapError(toError));
+		).pipe(
+			Effect.mapError(toError),
+			Effect.tapError((error) =>
+				Effect.sync(() =>
+					debugLog(getEnv, `network error for ${url}: ${error.message}`),
+				),
+			),
+		);
 
 		if (!response.ok) {
+			const text = yield* tryPromise(() => response.text()).pipe(
+				Effect.mapError(toError),
+			);
+			debugLog(getEnv, `${url} -> ${response.status} ${text.slice(0, 400)}`);
 			return yield* Effect.fail(
-				new Error(`OpenAI request failed: ${response.status}`),
+				new Error(
+					`OpenAI request failed: ${response.status} ${text.slice(0, 400)}`,
+				),
 			);
 		}
 

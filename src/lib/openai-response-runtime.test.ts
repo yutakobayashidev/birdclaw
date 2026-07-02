@@ -6,12 +6,41 @@ import {
 	processOpenAIResponseSseChunk,
 	readOpenAIResponseStreamEffect,
 	requestOpenAIResponseEffect,
+	resolveOpenAIBaseUrl,
 } from "./openai-response-runtime";
 
 afterEach(() => {
 	delete process.env.OPENAI_API_KEY;
 	delete process.env.OPENAI_BASE_URL;
+	delete process.env.BIRDCLAW_OPENAI_BASE_URL;
+	delete process.env.BIRDCLAW_DEBUG;
 	vi.unstubAllGlobals();
+});
+
+describe("resolveOpenAIBaseUrl", () => {
+	it("defaults to the OpenAI endpoint", () => {
+		expect(resolveOpenAIBaseUrl(() => undefined)).toBe(
+			"https://api.openai.com/v1",
+		);
+	});
+
+	it("uses the birdclaw override and trims trailing slashes", () => {
+		const env: Record<string, string> = {
+			BIRDCLAW_OPENAI_BASE_URL: "http://localhost:11434/v1/",
+		};
+		expect(resolveOpenAIBaseUrl((name) => env[name])).toBe(
+			"http://localhost:11434/v1",
+		);
+	});
+
+	it("ignores the unsupported OPENAI_BASE_URL setting", () => {
+		const env: Record<string, string> = {
+			OPENAI_BASE_URL: "http://localhost:1234/v1",
+		};
+		expect(resolveOpenAIBaseUrl((name) => env[name])).toBe(
+			"https://api.openai.com/v1",
+		);
+	});
 });
 
 describe("OpenAI response runtime", () => {
@@ -78,29 +107,26 @@ describe("OpenAI response runtime", () => {
 		).rejects.toThrow("400 bad request");
 	});
 
-	it("uses OPENAI_BASE_URL for response requests", async () => {
-		const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
-
+	it("targets the configured base URL", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(new Response("{}", { status: 200 }));
+		const runtime = {
+			fetch: fetchMock,
+			now: () => new Date(),
+			random: () => 0,
+			env: (name: string) =>
+				({
+					OPENAI_API_KEY: "test",
+					BIRDCLAW_OPENAI_BASE_URL: "http://localhost:11434/v1",
+				})[name],
+		};
 		await Effect.runPromise(
-			requestOpenAIResponseEffect({
-				body: {},
-				runtime: {
-					fetch: fetchMock,
-					now: () => new Date("2026-06-24T00:00:00Z"),
-					random: () => 0,
-					env: (name) =>
-						name === "OPENAI_API_KEY"
-							? "test"
-							: name === "OPENAI_BASE_URL"
-								? "http://127.0.0.1:8080/openai/v1/"
-								: undefined,
-				},
-			}),
+			requestOpenAIResponseEffect({ body: { ok: true }, runtime }),
 		);
-
 		expect(fetchMock).toHaveBeenCalledWith(
-			"http://127.0.0.1:8080/openai/v1/responses",
-			expect.any(Object),
+			"http://localhost:11434/v1/responses",
+			expect.objectContaining({ method: "POST" }),
 		);
 	});
 });

@@ -182,7 +182,7 @@ Notes:
 - macOS recommended for Spotlight archive discovery
 - `bird` optional for relay/profile-backed timeline, mentions, likes, bookmarks, profiles, and tweet/reply writes
 - `xurl` optional for authored sync, bounded historical reads, and explicit accepted-DM operations
-- OpenAI API key optional for inbox scoring; set `OPENAI_BASE_URL` to use an OpenAI-compatible endpoint
+- OpenAI API key optional for inbox scoring; set `BIRDCLAW_OPENAI_BASE_URL` to use an OpenAI-compatible endpoint
 
 ## Install
 
@@ -502,7 +502,7 @@ birdclaw profile-analyse openai --max-pages 20 --max-conversations 40 --conversa
 
 ### What happened today
 
-`birdclaw today` streams a local "what happened" digest from the SQLite store. It uses the OpenAI Responses API with `gpt-5.5`, medium reasoning, and priority service tier by default. Set `OPENAI_API_KEY`; set `OPENAI_BASE_URL` for OpenAI-compatible endpoints; override with `BIRDCLAW_AI_MODEL`, `BIRDCLAW_OPENAI_REASONING_EFFORT`, or `BIRDCLAW_OPENAI_SERVICE_TIER` when needed. Use `--language <locale-id>` or `BIRDCLAW_DIGEST_LANGUAGE` for localized reports.
+`birdclaw today` streams a local "what happened" digest from the SQLite store. It uses the OpenAI Responses API with `gpt-5.5`, medium reasoning, and priority service tier by default. Set `OPENAI_API_KEY`; set `BIRDCLAW_OPENAI_BASE_URL` for OpenAI-compatible endpoints; override with `BIRDCLAW_AI_MODEL`, `BIRDCLAW_OPENAI_REASONING_EFFORT`, or `BIRDCLAW_OPENAI_SERVICE_TIER` when needed. Use `--language <locale-id>` or `BIRDCLAW_DIGEST_LANGUAGE` for localized reports.
 
 The normal bird-first workflow is to run `birdclaw jobs sync-account` from launchd so recent home, mentions, mention threads, likes, and bookmarks stay warm in local SQLite, then run `today`, `digest`, `search tweets`, or `discuss --mode local` against that local store. Digest commands do not live-refresh by default. Use `--live-sync` or `--live-mode xurl` only when you explicitly want a bounded live refresh for the selected report window.
 
