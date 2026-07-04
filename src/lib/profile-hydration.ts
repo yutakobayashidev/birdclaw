@@ -1,13 +1,13 @@
 import { Effect } from "effect";
 
 import { normalizeAvatarUrl } from "./avatar-cache";
-import { getAuthenticatedBirdAccount } from "./bird";
+import { getAuthenticatedBirdAccountEffect } from "./bird";
 import { getNativeDb } from "./db";
-import { runEffectPromise, tryPromise } from "./effect-runtime";
+import { runEffectPromise } from "./effect-runtime";
 import {
-	getTransportStatus,
-	lookupAuthenticatedUser,
-	lookupUsersByIds,
+	getTransportStatusEffect,
+	lookupAuthenticatedUserEffect,
+	lookupUsersByIdsEffect,
 } from "./xurl";
 import { upsertProfileFromXUser } from "./x-profile";
 
@@ -54,9 +54,9 @@ function hydrateAccountFromBirdEffect(): Effect.Effect<boolean, unknown> {
 			return row?.bird_profile_name?.trim() || null;
 		});
 		if (!profileName) return false;
-		const account = yield* tryPromise(() =>
-			getAuthenticatedBirdAccount(profileName),
-		).pipe(Effect.catchAll(() => Effect.succeed(null)));
+		const account = yield* getAuthenticatedBirdAccountEffect(profileName).pipe(
+			Effect.catchAll(() => Effect.succeed(null)),
+		);
 		if (!account?.username) return false;
 
 		const handle = account.username.replace(/^@/, "");
@@ -145,7 +145,7 @@ export function hydrateProfilesFromXEffect(): Effect.Effect<
 	unknown
 > {
 	return Effect.gen(function* () {
-		const transport = yield* tryPromise(() => getTransportStatus());
+		const transport = yield* getTransportStatusEffect();
 		if (transport.availableTransport !== "xurl") {
 			// xurl is unavailable, so the live profile backfill can't run. When the
 			// bird transport is authenticated we can still correct the seeded
@@ -220,7 +220,7 @@ export function hydrateProfilesFromXEffect(): Effect.Effect<
 
 		for (let index = 0; index < candidateIds.length; index += 100) {
 			const batch = candidateIds.slice(index, index + 100);
-			const users = yield* tryPromise(() => lookupUsersByIds(batch));
+			const users = yield* lookupUsersByIdsEffect(batch);
 
 			yield* trySync(() => {
 				db.transaction(() => {
@@ -240,7 +240,7 @@ export function hydrateProfilesFromXEffect(): Effect.Effect<
 		}
 
 		let hydratedAccount = false;
-		const me = yield* tryPromise(() => lookupAuthenticatedUser()).pipe(
+		const me = yield* lookupAuthenticatedUserEffect().pipe(
 			Effect.catchAll(() => Effect.succeed(null)),
 		);
 		if (me) {

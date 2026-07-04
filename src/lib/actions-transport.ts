@@ -1,14 +1,14 @@
 import {
-	blockUserViaBird,
-	muteUserViaBird,
-	readBirdStatusViaBird,
-	unblockUserViaBird,
-	unmuteUserViaBird,
+	blockUserViaBirdEffect,
+	muteUserViaBirdEffect,
+	readBirdStatusViaBirdEffect,
+	unblockUserViaBirdEffect,
+	unmuteUserViaBirdEffect,
 } from "./bird-actions";
 import { type ActionsTransport, resolveActionsTransport } from "./config";
 import { Effect } from "effect";
 import { getNativeDb } from "./db";
-import { runEffectPromise, tryPromise } from "./effect-runtime";
+import { runEffectPromise } from "./effect-runtime";
 import { profileHandleKey } from "./profile-row";
 import type {
 	ModerationAction,
@@ -16,11 +16,11 @@ import type {
 	ModerationTransportKind,
 } from "./types";
 import {
-	blockUserViaXurl,
-	lookupAuthenticatedUserFresh,
-	muteUserViaXurl,
-	unblockUserViaXurl,
-	unmuteUserViaXurl,
+	blockUserViaXurlEffect,
+	lookupAuthenticatedUserFreshEffect,
+	muteUserViaXurlEffect,
+	unblockUserViaXurlEffect,
+	unmuteUserViaXurlEffect,
 } from "./xurl";
 
 export type ActionTransportResult = ModerationActionTransportResult;
@@ -74,7 +74,7 @@ function verifyExpectedAccountEffect(
 		if (!expectedAccount) return null;
 		if (liveWritesDisabled()) return null;
 
-		const sourceUser = yield* tryPromise(() => lookupAuthenticatedUserFresh());
+		const sourceUser = yield* lookupAuthenticatedUserFreshEffect();
 		const sourceUserId =
 			sourceUser && typeof sourceUser.id === "string" ? sourceUser.id : "";
 		const sourceUsername =
@@ -111,15 +111,13 @@ function runBirdActionEffect(
 	profileName: string,
 ): Effect.Effect<ActionTransportResult, unknown> {
 	return Effect.gen(function* () {
-		const result = yield* tryPromise(() =>
-			action === "block"
-				? blockUserViaBird(query, profileName)
-				: action === "unblock"
-					? unblockUserViaBird(query, profileName)
-					: action === "mute"
-						? muteUserViaBird(query, profileName)
-						: unmuteUserViaBird(query, profileName),
-		);
+		const result = yield* action === "block"
+			? blockUserViaBirdEffect(query, profileName)
+			: action === "unblock"
+				? unblockUserViaBirdEffect(query, profileName)
+				: action === "mute"
+					? muteUserViaBirdEffect(query, profileName)
+					: unmuteUserViaBirdEffect(query, profileName);
 
 		return {
 			...result,
@@ -158,9 +156,7 @@ function runXurlActionEffect(
 
 		let sourceUserId = verifiedSourceUserId ?? "";
 		if (!sourceUserId) {
-			const sourceUser = yield* tryPromise(() =>
-				lookupAuthenticatedUserFresh(),
-			);
+			const sourceUser = yield* lookupAuthenticatedUserFreshEffect();
 			sourceUserId =
 				sourceUser && typeof sourceUser.id === "string" ? sourceUser.id : "";
 		}
@@ -172,15 +168,13 @@ function runXurlActionEffect(
 			};
 		}
 
-		const result = yield* tryPromise(() =>
-			action === "block"
-				? blockUserViaXurl(sourceUserId, targetUserId)
-				: action === "unblock"
-					? unblockUserViaXurl(sourceUserId, targetUserId)
-					: action === "mute"
-						? muteUserViaXurl(sourceUserId, targetUserId)
-						: unmuteUserViaXurl(sourceUserId, targetUserId),
-		);
+		const result = yield* action === "block"
+			? blockUserViaXurlEffect(sourceUserId, targetUserId)
+			: action === "unblock"
+				? unblockUserViaXurlEffect(sourceUserId, targetUserId)
+				: action === "mute"
+					? muteUserViaXurlEffect(sourceUserId, targetUserId)
+					: unmuteUserViaXurlEffect(sourceUserId, targetUserId);
 
 		if (!result.ok) {
 			return {
@@ -189,9 +183,7 @@ function runXurlActionEffect(
 			};
 		}
 
-		const status = yield* tryPromise(() =>
-			readBirdStatusViaBird(query, profileName),
-		);
+		const status = yield* readBirdStatusViaBirdEffect(query, profileName);
 		const { field: verifyField, expected: expectedValue } =
 			getVerifyExpectation(action);
 		const actualValue =

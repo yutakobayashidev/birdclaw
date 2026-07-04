@@ -149,9 +149,10 @@ function fetchOwnedListsEffect({
 				new Error("bird_profile_name is required to use bird"),
 			);
 		}
+		const profileName = account.birdProfileName;
 		return Effect.gen(function* () {
 			const authenticated = yield* getAuthenticatedBirdAccountEffect(
-				account.birdProfileName,
+				profileName,
 			);
 			yield* trySync(() =>
 				assertLiveAccountMatches({
@@ -163,7 +164,7 @@ function fetchOwnedListsEffect({
 			);
 			return yield* listOwnedXListsViaBirdEffect({
 				maxResults: maxLists,
-				profileName: account.birdProfileName,
+				profileName,
 			});
 		});
 	}

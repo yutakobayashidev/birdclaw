@@ -24,10 +24,11 @@ vi.mock("./bird", async (importOriginal) => {
 		error instanceof Error ? error : new Error(String(error));
 	return {
 		...actual,
-		getAuthenticatedBirdAccount: () => mocks.getAuthenticatedBirdAccount(),
-		getAuthenticatedBirdAccountEffect: () =>
+		getAuthenticatedBirdAccount: (...args: unknown[]) =>
+			mocks.getAuthenticatedBirdAccount(...args),
+		getAuthenticatedBirdAccountEffect: (...args: unknown[]) =>
 			Effect.tryPromise({
-				try: () => mocks.getAuthenticatedBirdAccount(),
+				try: () => mocks.getAuthenticatedBirdAccount(...args),
 				catch: toError,
 			}),
 		listUserTweetsViaBird: (...args: unknown[]) =>
@@ -40,12 +41,14 @@ vi.mock("./bird", async (importOriginal) => {
 	};
 });
 
-vi.mock("./xurl", () => ({
-	getTransportStatus: (...args: unknown[]) => mocks.getTransportStatus(...args),
-	listUserTweets: (...args: unknown[]) => mocks.listUserTweets(...args),
-	lookupAuthenticatedUser: (...args: unknown[]) =>
-		mocks.lookupAuthenticatedUser(...args),
-}));
+vi.mock("./xurl", async () => {
+	const { effectFromMock: fromMock } = await import("../test/effect-mocks");
+	return {
+		getTransportStatusEffect: fromMock(mocks.getTransportStatus),
+		listUserTweetsEffect: fromMock(mocks.listUserTweets),
+		lookupAuthenticatedUserEffect: fromMock(mocks.lookupAuthenticatedUser),
+	};
+});
 
 const tempDirs: string[] = [];
 
