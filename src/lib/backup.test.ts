@@ -584,7 +584,7 @@ describe("text backup", () => {
 		expect(validation.ok).toBe(true);
 	}, 20000);
 
-	it("emits byte-identical schema-v2 data and hashes for the same database", async () => {
+	it("emits byte-identical schema-v4 data and hashes for the same database", async () => {
 		switchHome("birdclaw-backup-stable-src-");
 		seedBackupFixture();
 		const firstRepoPath = makeTempDir("birdclaw-backup-stable-first-");
@@ -593,7 +593,7 @@ describe("text backup", () => {
 		const first = await exportBackup({ repoPath: firstRepoPath });
 		const second = await exportBackup({ repoPath: secondRepoPath });
 
-		expect(first.manifest.schemaVersion).toBe(3);
+		expect(first.manifest.schemaVersion).toBe(4);
 		expect(first.manifest.backupHash).toBe(
 			"53cf3ff3c7e3bb7bcba6a23c6d2890ebc92c226b02c49e70084880fb6b386fe3",
 		);
@@ -605,6 +605,37 @@ describe("text backup", () => {
 				readFileSync(path.join(firstRepoPath, file.path)),
 			);
 		}
+	}, 20000);
+
+	it("splits oversized logical shards into deterministic bounded part files", async () => {
+		switchHome("birdclaw-backup-parts-src-");
+		seedBackupFixture();
+		const db = getNativeDb();
+		const largeRawJson = JSON.stringify({ blob: "x".repeat(700_000) });
+		db.prepare("update profiles set raw_json = ?").run(largeRawJson);
+		const before = getBackupDatabaseFingerprint();
+		const repoPath = makeTempDir("birdclaw-backup-parts-store-");
+
+		const exported = await exportBackup({
+			repoPath,
+			maxShardBytes: 1_000_000,
+		});
+		const profileFiles = exported.manifest.files.filter((file) =>
+			file.path.startsWith("data/profiles.part-"),
+		);
+
+		expect(profileFiles.map((file) => file.path)).toEqual([
+			"data/profiles.part-0001.jsonl",
+			"data/profiles.part-0002.jsonl",
+		]);
+		expect(profileFiles.every((file) => file.bytes <= 1_000_000)).toBe(true);
+		expect(profileFiles.reduce((sum, file) => sum + file.rows, 0)).toBe(2);
+		expect(existsSync(path.join(repoPath, "data/profiles.jsonl"))).toBe(false);
+		expect(exported.validation.ok).toBe(true);
+
+		switchHome("birdclaw-backup-parts-dst-");
+		const imported = await importBackup({ repoPath, mode: "replace" });
+		expect(imported.fingerprint).toEqual(before);
 	}, 20000);
 
 	it("does not downgrade a fresh DM request when merging a stale backup", async () => {

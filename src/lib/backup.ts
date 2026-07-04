@@ -11,6 +11,7 @@ import {
 	buildBackupShardsFromRowSets,
 	countBackupFiles,
 	createBackupImportRows,
+	logicalBackupShardPath,
 	type BackupImportRows,
 	type BackupJsonRecord as JsonRecord,
 	type BackupJsonValue as JsonValue,
@@ -26,8 +27,9 @@ import {
 } from "./streaming-ingestion";
 import { runSubprocessEffect, SubprocessError } from "./subprocess";
 
-const BACKUP_SCHEMA_VERSION = 3;
+const BACKUP_SCHEMA_VERSION = 4;
 const MIN_SUPPORTED_BACKUP_SCHEMA_VERSION = 1;
+const DEFAULT_MAX_BACKUP_SHARD_BYTES = 48 * 1024 * 1024;
 const MANIFEST_PATH = "manifest.json";
 const DATA_DIR = "data";
 const GITATTRIBUTES_PATH = ".gitattributes";
@@ -245,6 +247,57 @@ function buildShards(db: Database) {
 	return buildBackupShardsFromRowSets(getExportRowSets(db));
 }
 
+function normalizeMaxBackupShardBytes(value: number | undefined) {
+	const maxBytes = value ?? DEFAULT_MAX_BACKUP_SHARD_BYTES;
+	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+		throw new Error("Backup shard byte limit must be a positive integer");
+	}
+	return maxBytes;
+}
+
+function partPath(relativePath: string, partNumber: number) {
+	if (!relativePath.endsWith(".jsonl")) {
+		throw new Error(`Backup shard path must end in .jsonl: ${relativePath}`);
+	}
+	return relativePath.replace(
+		/\.jsonl$/u,
+		`.part-${String(partNumber).padStart(4, "0")}.jsonl`,
+	);
+}
+
+function splitJsonlShard(
+	relativePath: string,
+	rows: JsonRecord[],
+	maxBytes: number,
+) {
+	const parts: JsonRecord[][] = [];
+	let currentRows: JsonRecord[] = [];
+	let currentBytes = 0;
+	for (const [index, row] of rows.entries()) {
+		const rowBytes = Buffer.byteLength(jsonlStringify(row)) + 1;
+		if (rowBytes > maxBytes) {
+			throw new Error(
+				`Backup row exceeds shard byte limit: ${relativePath}:${index + 1} is ${rowBytes} bytes (limit ${maxBytes})`,
+			);
+		}
+		if (currentRows.length > 0 && currentBytes + rowBytes > maxBytes) {
+			parts.push(currentRows);
+			currentRows = [];
+			currentBytes = 0;
+		}
+		currentRows.push(row);
+		currentBytes += rowBytes;
+	}
+	if (currentRows.length > 0) parts.push(currentRows);
+	if (parts.length <= 1) {
+		return [{ relativePath, rows: parts[0] ?? [] }];
+	}
+	return parts.map((partRows, index) => ({
+		relativePath: partPath(relativePath, index + 1),
+		rows: partRows,
+	}));
+}
+
 function writeJsonlFileEffect(
 	repoPath: string,
 	relativePath: string,
@@ -401,6 +454,7 @@ data/follow_events.jsonl
 \`\`\`
 
 Tweets are sharded by creation year. Collection-only tweets whose creation date is unknown live in \`data/tweets/unknown.jsonl\`. Timeline edges keep account-scoped home/mention membership separate from canonical tweet content. DMs are sharded by year and keep \`conversation_id\` in each row.
+Logical shards larger than 48 MiB are split into deterministic \`.part-0001.jsonl\` files so ordinary Git hosting remains usable without Git LFS.
 The links shard stores expanded short URLs and their source tweet/DM occurrences so linked-tweet search can be rebuilt without re-expanding every \`t.co\` URL.
 
 Never commit live tokens, browser cookies, raw SQLite WAL/SHM sidecars, or temporary cache files here.
@@ -689,6 +743,7 @@ export function exportBackupEffect({
 	push = false,
 	message = "archive: update birdclaw backup",
 	validate = true,
+	maxShardBytes,
 }: {
 	repoPath: string;
 	db?: Database;
@@ -696,6 +751,7 @@ export function exportBackupEffect({
 	push?: boolean;
 	message?: string;
 	validate?: boolean;
+	maxShardBytes?: number;
 }): Effect.Effect<BackupExportResult, unknown> {
 	return Effect.gen(function* () {
 		const resolvedRepoPath = yield* trySync(() => path.resolve(repoPath));
@@ -711,20 +767,28 @@ export function exportBackupEffect({
 		yield* ensureBackupGitattributesEffect(resolvedRepoPath);
 		yield* ensureBackupReadmeEffect(resolvedRepoPath);
 
+		const maxBytes = yield* trySync(() =>
+			normalizeMaxBackupShardBytes(maxShardBytes),
+		);
 		const shards = yield* trySync(() => buildShards(database));
 		const shardEntries = yield* trySync(() =>
 			[...shards.entries()].sort(([left], [right]) =>
 				left.localeCompare(right),
 			),
 		);
+		const shardParts = yield* trySync(() =>
+			shardEntries.flatMap(([relativePath, rows]) =>
+				splitJsonlShard(relativePath, rows, maxBytes),
+			),
+		);
 		const expectedPaths = yield* trySync(
-			() => new Set(shardEntries.map(([relativePath]) => relativePath)),
+			() => new Set(shardParts.map(({ relativePath }) => relativePath)),
 		);
 		const files = yield* Effect.forEach(
-			shardEntries,
-			([relativePath, rows]) =>
+			shardParts,
+			({ relativePath, rows }) =>
 				writeJsonlFileEffect(resolvedRepoPath, relativePath, rows),
-			{ concurrency: "unbounded" },
+			{ concurrency: 1 },
 		);
 		yield* removeStaleBackupFilesEffect(resolvedRepoPath, expectedPaths);
 
@@ -974,7 +1038,7 @@ function rowsForManifestPath(
 ) {
 	return manifest.files
 		.map((file) => file.path)
-		.filter(predicate)
+		.filter((relativePath) => predicate(logicalBackupShardPath(relativePath)))
 		.sort();
 }
 
@@ -1559,7 +1623,7 @@ export function validateBackupEffect(
 					}
 					return { file, errors: fileErrors };
 				}),
-			{ concurrency: "unbounded" },
+			{ concurrency: 1 },
 		);
 
 		const files: BackupFileManifest[] = [];

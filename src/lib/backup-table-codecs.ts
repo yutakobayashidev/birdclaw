@@ -39,6 +39,12 @@ export interface BackupTableCodec<
 	name: Name;
 }
 
+const BACKUP_SHARD_PART_PATTERN = /\.part-\d{4,}\.jsonl$/u;
+
+export function logicalBackupShardPath(relativePath: string) {
+	return relativePath.replace(BACKUP_SHARD_PART_PATTERN, ".jsonl");
+}
+
 function fixedShard(relativePath: string, countKey: string) {
 	return {
 		shardPath: () => relativePath,
@@ -1112,7 +1118,8 @@ export function backupCodecForPath(
 	relativePath: string,
 	codecs: readonly BackupTableCodec[] = BACKUP_TABLE_CODECS,
 ) {
-	const matches = codecs.filter((codec) => codec.matchesPath(relativePath));
+	const logicalPath = logicalBackupShardPath(relativePath);
+	const matches = codecs.filter((codec) => codec.matchesPath(logicalPath));
 	if (matches.length !== 1) {
 		throw new Error(
 			matches.length === 0
@@ -1151,7 +1158,7 @@ export function countBackupFiles(
 	for (const file of files) {
 		if (!file.path.startsWith("data/")) continue;
 		const codec = backupCodecForPath(file.path, codecs);
-		const key = codec.countKey(file.path);
+		const key = codec.countKey(logicalBackupShardPath(file.path));
 		counts[key] = (counts[key] ?? 0) + file.rows;
 	}
 	return counts;

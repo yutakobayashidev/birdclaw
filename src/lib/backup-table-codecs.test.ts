@@ -6,6 +6,7 @@ import {
 	backupCodecForPath,
 	buildBackupShardsFromRowSets,
 	countBackupFiles,
+	logicalBackupShardPath,
 	type BackupTableCodec,
 } from "./backup-table-codecs";
 
@@ -87,6 +88,24 @@ describe("backup table codecs", () => {
 		expect(backupCodecForPath("data/synthetic/a.jsonl", [synthetic])).toBe(
 			synthetic,
 		);
+	});
+
+	it("routes deterministic part files through their logical shard codec", () => {
+		expect(logicalBackupShardPath("data/profiles.part-0001.jsonl")).toBe(
+			"data/profiles.jsonl",
+		);
+		expect(backupCodecForPath("data/profiles.part-0001.jsonl").name).toBe(
+			"profiles",
+		);
+		expect(backupCodecForPath("data/tweets/2026.part-0012.jsonl").name).toBe(
+			"tweets",
+		);
+		expect(
+			countBackupFiles([
+				{ path: "data/profiles.part-0001.jsonl", rows: 2 },
+				{ path: "data/profiles.part-0002.jsonl", rows: 3 },
+			]),
+		).toEqual({ profiles: 5 });
 	});
 
 	it("adapts schema-v1 tweet state at the registry boundary", () => {

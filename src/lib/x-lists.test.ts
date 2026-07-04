@@ -274,7 +274,7 @@ describe("X List sync and local filtering", () => {
 		]);
 	});
 
-	it("round-trips List metadata and membership through schema v3 backup", async () => {
+	it("round-trips List metadata and membership through schema v4 backup", async () => {
 		setupAccount();
 		mocks.listOwnedXListsViaBird.mockResolvedValue(ownedList(1));
 		mocks.listXListMembersViaBird.mockResolvedValue({
@@ -290,7 +290,7 @@ describe("X List sync and local filtering", () => {
 		tempRoots.push(backupRoot);
 		const exported = await exportBackup({ repoPath: backupRoot });
 		expect(exported.manifest).toMatchObject({
-			schemaVersion: 3,
+			schemaVersion: 4,
 			counts: { x_lists: 1, x_list_members: 1 },
 		});
 

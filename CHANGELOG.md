@@ -2,6 +2,10 @@
 
 ## 0.9.2 - Unreleased
 
+### Fixed
+
+- Split oversized backup JSONL outputs into deterministic 48 MiB part files and serialize and validate them sequentially, keeping large archives below hosted Git limits without Git LFS.
+
 ## 0.9.1 - 2026-07-02
 
 ### Added

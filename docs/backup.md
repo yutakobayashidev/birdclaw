@@ -31,6 +31,7 @@ data/follow_edges.jsonl
 data/follow_events.jsonl
 data/lists/lists.jsonl
 data/lists/members.jsonl
+data/<logical-shard>.part-NNNN.jsonl
 ```
 
 Design rules:
@@ -47,6 +48,7 @@ Design rules:
 - **X Lists** preserve owned-List freshness/completeness metadata and current/ended member edges
 - **no SQLite WAL/SHM, FTS shadow tables, or transient live cache rows** ever land in the backup
 - **line endings** for hashed JSONL and manifest files stay LF on every platform via the generated `.gitattributes`
+- **large logical shards** split deterministically into numbered parts capped at 48 MiB, keeping every Git blob below common hosted-repository limits without Git LFS
 
 The manifest pins per-shard byte counts, row counts, and SHA hashes. Validation walks every shard and verifies they line up.
 
@@ -67,6 +69,7 @@ Flags:
 - `--no-validate` — skip post-export validation (not recommended)
 
 The `data/` directory is fully rewritten on every export. Anything outside `data/` (your README, license, hooks) is left alone.
+Logical shards at or below 48 MiB keep their existing filename. Larger shards become files such as `data/profile_snapshots.part-0001.jsonl`; import and validation accept both layouts.
 
 ## `backup sync`
 

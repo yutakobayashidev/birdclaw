@@ -664,9 +664,11 @@ data/dms/conversations.jsonl
 data/dms/YYYY.jsonl
 data/moderation/blocks.jsonl
 data/moderation/mutes.jsonl
+data/<logical-shard>.part-NNNN.jsonl
 ```
 
 Tweets are sharded by year for human browsing and yearly analysis. Collection-only tweets whose real creation date is unknown go into `data/tweets/unknown.jsonl` instead of pretending they belong to 1970. Timeline membership is stored in `data/timeline_edges`; likes and bookmarks are stored as account-scoped collection edges in `data/collections`. DMs are sharded by year with `conversation_id` in each row; this keeps Git fast while preserving conversation membership.
+Any logical shard larger than 48 MiB is split into deterministic `.part-0001.jsonl` files. Import and validation accept both numbered parts and the earlier unsplit layout, so large private backups remain ordinary Git repositories without Git LFS.
 
 Use `backup sync` when the target is a private Git repo. It pulls first, merge-imports the remote backup into local SQLite, exports the local union back into text shards, commits, and pushes.
 
