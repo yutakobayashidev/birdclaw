@@ -13,7 +13,7 @@ let
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "birdclaw";
-  version = "0.8.5";
+  version = "0.9.5";
 
   inherit src;
 
@@ -21,7 +21,7 @@ stdenv.mkDerivation (finalAttrs: {
     inherit (finalAttrs) pname version src;
     pnpm = pnpm';
     fetcherVersion = 3;
-    hash = "sha256-wjjRs8LgOMgXN+dd+CpZP/LwSorgySLFs2eIJ5e9T+w=";
+    hash = "sha256-5AttEzxdrRpgoNKKa6sjuQdEcV+jmi39RyUJSb0fx1U=";
   };
 
   nativeBuildInputs = [
