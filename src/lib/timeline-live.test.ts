@@ -120,7 +120,7 @@ describe("live home timeline sync", () => {
 
 	it("stores account-scoped home timeline edges without moving canonical tweets", async () => {
 		makeTempHome();
-		const db = getNativeDb(		);
+		const db = getNativeDb();
 		listHomeTimelineViaBirdMock.mockResolvedValueOnce({
 			data: [
 				{

@@ -51,7 +51,7 @@ birdclaw accounts set-bird-profile --account acct_primary --profile-name work
 birdclaw accounts clear-bird-profile --account acct_primary
 ```
 
-When `bird_profile_name` is set, account-scoped bird reads and writes pass it to `bird` as `--profile-name`. When it is unset, bird keeps using its own default profile/config.
+Account-scoped bird reads and writes require `bird_profile_name` and pass it to `bird` as `--profile-name`. Without it, Birdclaw fails before invoking bird so the operation cannot run against the wrong account.
 
 ## Verify xurl in birdclaw
 

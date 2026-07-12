@@ -13,7 +13,7 @@ birdclaw compose reply tweet_004 "On it."
 birdclaw compose dm dm_003 "Send it over." --transport xurl
 ```
 
-Tweet posts and tweet replies use `bird` first. DM replies require `--transport xurl` with the current bird CLI because bird does not expose DM sends. Compose commands never touch SQLite when the live call fails, so a failed publish does not leave a half-state row behind.
+Tweet posts and tweet replies use `bird` first. DM replies default to `xurl` because the current bird CLI does not expose DM sends. Compose commands never touch SQLite when the live call fails, so a failed publish does not leave a half-state row behind.
 
 ## compose post
 
@@ -56,7 +56,7 @@ birdclaw compose dm dm_003 "Send it over." --transport xurl
 birdclaw compose dm dm_004 "Sounds good." --transport xurl
 ```
 
-`compose dm` resolves the conversation, requires an explicit xurl transport for live send, and merges the sent message back into the local DM tables only after the transport succeeds.
+`compose dm` resolves the conversation, defaults to the xurl transport for live send, and merges the sent message back into the local DM tables only after the transport succeeds.
 
 ## Disabling live writes
 

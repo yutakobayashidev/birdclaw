@@ -469,6 +469,32 @@ describe("account sync job", () => {
 		);
 	});
 
+	it("uses xurl for DMs in profiled auto jobs", async () => {
+		tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-account-job-"));
+		const logPath = path.join(tempDir, "audit.jsonl");
+		const lockPath = path.join(tempDir, "sync.lock");
+		syncDirectMessagesViaCachedBirdMock.mockResolvedValue({
+			source: "xurl",
+			messages: 2,
+		});
+
+		await runAccountSyncJob({
+			account: "acct_openclaw",
+			steps: ["dms"],
+			mode: "auto",
+			logPath,
+			lockPath,
+			db: makeAccountsDb({ profiles: { acct_openclaw: "work" } }),
+		});
+
+		expect(syncDirectMessagesViaCachedBirdMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				account: "acct_openclaw",
+				mode: "xurl",
+			}),
+		);
+	});
+
 	it("records mention-thread sync errors as failed step results", async () => {
 		tempDir = mkdtempSync(path.join(os.tmpdir(), "birdclaw-account-job-"));
 		const logPath = path.join(tempDir, "audit.jsonl");

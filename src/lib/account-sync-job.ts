@@ -260,11 +260,14 @@ async function runStep({
 			};
 		}
 		if (kind === "dms") {
-			const dmMode = birdAccountConfigured
-				? mode
-				: mode === "bird"
-					? undefined
-					: "xurl";
+			const dmMode =
+				mode === "auto"
+					? "xurl"
+					: birdAccountConfigured
+						? mode
+						: mode === "bird"
+							? undefined
+							: "xurl";
 			if (!dmMode) {
 				return { kind, ok: false, count: 0, error: birdAccountError(kind) };
 			}

@@ -654,7 +654,7 @@ Flags:
 - `--refresh`
 - `--cache-ttl <seconds>`
 
-`--mode bird` and `--mode auto` currently fail fast for DMs because the current `bird` CLI does not expose DM reads or message-request mutations. Use `--mode xurl` to read recent OAuth2 `/2/dm_events` as accepted conversations.
+DM refreshes default to `--mode xurl` and read recent OAuth2 `/2/dm_events` as accepted conversations. Explicit `--mode bird` and `--mode auto` fail fast because the current `bird` CLI does not expose DM reads or message-request mutations.
 
 ### `inbox`
 

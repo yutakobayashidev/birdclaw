@@ -20,7 +20,7 @@ birdclaw dms list --unreplied --min-followers 500 --min-influence-score 90 --sor
 Flags:
 
 - `--refresh` — refresh live DMs before listing
-- `--mode bird|xurl|auto` — choose the live transport for refreshes; use `xurl` for live DM refreshes with the current bird CLI
+- `--mode bird|xurl|auto` — choose the live transport for refreshes; defaults to `xurl`
 - `--cache-ttl <seconds>` — tune freshness
 - `--participant <handle-or-id>`
 - `--min-followers <n>` / `--max-followers <n>`
@@ -48,7 +48,7 @@ Flags:
 
 Sync is idempotent — re-running merges new events without disturbing already-imported message bodies.
 
-`--mode bird` and `--mode auto` currently fail fast because the current `bird` CLI does not expose DM reads, sends, or message-request mutations. `--mode xurl` imports recent OAuth2 `/2/dm_events` as accepted conversations only. Message-request inbox sync is unsupported until bird exposes it.
+DM sync defaults to `--mode xurl` and imports recent OAuth2 `/2/dm_events` as accepted conversations only. Explicit `--mode bird` and `--mode auto` fail fast because the current `bird` CLI does not expose DM reads, sends, or message-request mutations. Message-request inbox sync is unsupported until bird exposes it.
 
 ## Search
 
@@ -112,7 +112,7 @@ birdclaw dms list --unreplied --min-influence-score 80 --limit 20 --json
 birdclaw compose dm dm_003 "Send it over." --transport xurl
 ```
 
-DM replies default to bird and fail fast because the current `bird` CLI does not expose DM sends. Pass `--transport xurl` to send through xurl for accepted conversations. Without a working explicit transport, the command fails before recording a half-state local row.
+DM replies default to `xurl` for accepted conversations because the current `bird` CLI does not expose DM sends. An unsupported or failed transport stops before recording a half-state local row.
 
 ## Archive import
 

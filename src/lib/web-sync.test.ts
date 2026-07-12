@@ -161,33 +161,34 @@ describe("web sync dispatcher", () => {
 		});
 	});
 
-	it("passes dm request sync options through to Bird", async () => {
+	it("uses xurl for web DM sync", async () => {
 		syncDirectMessagesViaCachedBirdMock.mockResolvedValue({
 			ok: true,
-			source: "bird",
+			source: "xurl",
 			conversations: 12,
 			messages: 34,
 		});
 
 		const result = await runWebSync("dms", undefined, {
-			inbox: "requests",
-			limit: 200,
+			inbox: "accepted",
+			limit: 50,
 			maxPages: 3,
 		});
 
 		expect(syncDirectMessagesViaCachedBirdMock).toHaveBeenCalledWith({
 			account: undefined,
-			inbox: "requests",
-			limit: 200,
+			mode: "xurl",
+			inbox: "accepted",
+			limit: 50,
 			maxPages: 3,
-			pageDelayMs: 750,
+			pageDelayMs: 0,
 			refresh: true,
 		});
 		expect(result).toMatchObject({
 			ok: true,
 			kind: "dms",
 			summary: "Synced 34 items",
-			steps: [{ kind: "dms", count: 34, source: "bird" }],
+			steps: [{ kind: "dms", count: 34, source: "xurl" }],
 		});
 	});
 

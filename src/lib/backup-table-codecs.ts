@@ -388,13 +388,13 @@ const definitions = {
         updated_at
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       on conflict(account_id, list_id) do update set
-        name = excluded.name,
-        description = excluded.description,
+        name = case when excluded.updated_at >= x_lists.updated_at then excluded.name else x_lists.name end,
+        description = case when excluded.updated_at >= x_lists.updated_at then excluded.description else x_lists.description end,
         owner_profile_id = coalesce(excluded.owner_profile_id, x_lists.owner_profile_id),
         owner_external_user_id = coalesce(excluded.owner_external_user_id, x_lists.owner_external_user_id),
         is_private = case when excluded.updated_at >= x_lists.updated_at then excluded.is_private else x_lists.is_private end,
-        member_count = coalesce(excluded.member_count, x_lists.member_count),
-        follower_count = coalesce(excluded.follower_count, x_lists.follower_count),
+        member_count = case when excluded.updated_at >= x_lists.updated_at then coalesce(excluded.member_count, x_lists.member_count) else x_lists.member_count end,
+        follower_count = case when excluded.updated_at >= x_lists.updated_at then coalesce(excluded.follower_count, x_lists.follower_count) else x_lists.follower_count end,
         source = case when excluded.updated_at >= x_lists.updated_at then excluded.source else x_lists.source end,
         membership_status = case when excluded.updated_at >= x_lists.updated_at then excluded.membership_status else x_lists.membership_status end,
         lists_synced_at = max(x_lists.lists_synced_at, excluded.lists_synced_at),

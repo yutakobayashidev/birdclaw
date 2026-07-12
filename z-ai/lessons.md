@@ -6,3 +6,4 @@
 - Status/readiness pages must use the same selected account context as sync and actions; otherwise they report the default account and hide profile configuration problems.
 - Before `commit&push`, verify the target branch with the user or explicit context. If the current feature branch is already merged, switch to `main` and commit there instead of appending to the stale branch.
 - When integrating upstream configuration changes, do not retain legacy environment-variable fallbacks unless the user explicitly requests them; use one canonical setting.
+- During upstream integration, preserve fork behavior as a minimal delta on top of the upstream implementation structure; do not keep whole fork files when a narrower adaptation is possible.

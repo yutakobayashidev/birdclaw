@@ -32,7 +32,7 @@ export function registerComposeCommands({
 	composeCommand
 		.command("dm <conversationId> <text>")
 		.description("Reply inside an existing DM conversation")
-		.option("--transport <transport>", "DM transport: xurl or bird", "bird")
+		.option("--transport <transport>", "DM transport: xurl or bird", "xurl")
 		.action(async (conversationId, text, options) => {
 			if (options.transport !== "bird" && options.transport !== "xurl") {
 				throw new Error("--transport must be bird or xurl");

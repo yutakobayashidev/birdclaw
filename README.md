@@ -545,7 +545,7 @@ pnpm cli dms list --refresh --limit 10 --json
 pnpm cli dms list --unreplied --min-followers 500 --min-influence-score 90 --sort followers --json
 ```
 
-`dms sync/list --refresh` supports `--mode bird|xurl|auto`, but the current `bird` CLI does not expose DMs. Use `--mode xurl` for recent accepted OAuth2 DM events. Message requests, accept/reject, block/mute, and bird-backed DM sends are triaged as unsupported until bird exposes those commands.
+`dms sync/list --refresh` defaults to `--mode xurl` for recent accepted OAuth2 DM events. Explicit `--mode bird` and `--mode auto` fail fast because the current `bird` CLI does not expose DMs. Message requests, accept/reject, block/mute, and bird-backed DM sends are triaged as unsupported until bird exposes those commands.
 
 `--resolve-profiles` fills archive-imported numeric DM profiles through the local
 cache first, then `bird`, then `xurl` unless `--no-xurl-fallback` is set.

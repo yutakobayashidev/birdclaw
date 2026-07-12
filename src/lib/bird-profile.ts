@@ -12,9 +12,7 @@ export function getBirdProfileName(
 ): string | undefined {
 	const row = accountId
 		? (db
-				.prepare(
-					"select bird_profile_name from accounts where id = ?",
-				)
+				.prepare("select bird_profile_name from accounts where id = ?")
 				.get(accountId) as { bird_profile_name: string | null } | undefined)
 		: (db
 				.prepare(
@@ -29,4 +27,3 @@ export function getBirdProfileName(
 
 	return row ? toProfileName(row.bird_profile_name) : undefined;
 }
-

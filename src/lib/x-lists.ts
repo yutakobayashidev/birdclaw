@@ -151,9 +151,8 @@ function fetchOwnedListsEffect({
 		}
 		const profileName = account.birdProfileName;
 		return Effect.gen(function* () {
-			const authenticated = yield* getAuthenticatedBirdAccountEffect(
-				profileName,
-			);
+			const authenticated =
+				yield* getAuthenticatedBirdAccountEffect(profileName);
 			yield* trySync(() =>
 				assertLiveAccountMatches({
 					source: "bird",

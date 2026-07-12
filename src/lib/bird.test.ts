@@ -199,8 +199,8 @@ describe("bird transport wrapper", () => {
 		await expect(
 			listMentionsViaBird({ maxResults: 5, profileName: PROFILE_NAME }),
 		).resolves.toMatchObject({
-				data: [],
-			});
+			data: [],
+		});
 		expectBirdCommandCall(1, ["mentions", "-n", "5", "--json-full"]);
 		expectBirdCommandCall(2, ["mentions", "-n", "5", "--json"]);
 	});

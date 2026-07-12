@@ -667,6 +667,59 @@ describe("text backup", () => {
 		).toEqual({ inbox_kind: "request" });
 	});
 
+	it("does not downgrade fresh X List metadata when merging a stale backup", async () => {
+		switchHome("birdclaw-backup-list-merge-");
+		const db = getNativeDb();
+		db.exec(`
+			insert into x_lists (
+				account_id, list_id, name, description, owner_profile_id,
+				owner_external_user_id, is_private, member_count, follower_count,
+				source, membership_status, lists_synced_at, members_synced_at,
+				member_page_count, member_result_count, rate_limit_json, raw_json,
+				updated_at
+			) values (
+				'acct_primary', 'list_builders', 'Old Builders', 'Old description',
+				null, null, 0, 10, 11, 'bird', 'partial',
+				'2026-01-01T00:00:00.000Z', null, 1, 10, '{}', '{}',
+				'2026-01-01T00:00:00.000Z'
+			);
+		`);
+		const repoPath = makeTempDir("birdclaw-backup-list-merge-repo-");
+		await exportBackup({ repoPath });
+
+		db.prepare(
+			`update x_lists set
+				name = ?, description = ?, member_count = ?, follower_count = ?,
+				updated_at = ?
+			 where account_id = ? and list_id = ?`,
+		).run(
+			"Fresh Builders",
+			"Fresh description",
+			20,
+			21,
+			"2026-02-01T00:00:00.000Z",
+			"acct_primary",
+			"list_builders",
+		);
+
+		await importBackup({ repoPath });
+
+		expect(
+			db
+				.prepare(
+					`select name, description, member_count, follower_count, updated_at
+					 from x_lists where account_id = ? and list_id = ?`,
+				)
+				.get("acct_primary", "list_builders"),
+		).toEqual({
+			name: "Fresh Builders",
+			description: "Fresh description",
+			member_count: 20,
+			follower_count: 21,
+			updated_at: "2026-02-01T00:00:00.000Z",
+		});
+	});
+
 	it("merges backup rows without deleting local-only tweets", async () => {
 		switchHome("birdclaw-backup-src-");
 		seedBackupFixture();

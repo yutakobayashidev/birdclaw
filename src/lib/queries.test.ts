@@ -130,12 +130,14 @@ function setupTempHome() {
 	resetBirdclawPathsForTests();
 	resetDatabaseForTests();
 	const db = getNativeDb();
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-primary", "acct_primary");
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-studio", "acct_studio");
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-primary",
+		"acct_primary",
+	);
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-studio",
+		"acct_studio",
+	);
 }
 
 type TestDatabase = ReturnType<typeof getNativeDb>;

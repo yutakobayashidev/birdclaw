@@ -64,9 +64,10 @@ function resetStore() {
 	db.prepare(
 		"insert into accounts (id, name, handle, transport, is_default, created_at) values ('acct_primary', 'Peter', '@steipete', 'archive', 1, '2009-03-19T22:54:05.000Z')",
 	).run();
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-primary", "acct_primary");
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-primary",
+		"acct_primary",
+	);
 	db.prepare(
 		"insert into profiles (id, handle, display_name, bio, followers_count, avatar_hue, created_at) values ('profile_user_42', 'id42', 'id42', 'Imported from archive user 42', 0, 210, '2009-03-19T22:54:05.000Z')",
 	).run();
@@ -85,13 +86,14 @@ describe("profile resolver", () => {
 		mocks.lookupProfilesViaBird.mockReset();
 		mocks.lookupUsersByHandles.mockReset();
 		mocks.lookupUsersByIds.mockReset();
-		mocks.lookupProfilesViaBird.mockImplementation(async (targets: string[], profileName: string) =>
-			Promise.all(
-				targets.map(async (target) => ({
-					target,
-					user: await mocks.lookupProfileViaBird(target, profileName),
-				})),
-			),
+		mocks.lookupProfilesViaBird.mockImplementation(
+			async (targets: string[], profileName: string) =>
+				Promise.all(
+					targets.map(async (target) => ({
+						target,
+						user: await mocks.lookupProfileViaBird(target, profileName),
+					})),
+				),
 		);
 		resetStore();
 	});

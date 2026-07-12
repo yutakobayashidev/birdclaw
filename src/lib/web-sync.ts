@@ -136,9 +136,10 @@ const WEB_SYNC_PLANS: Record<WebSyncKind, WebSyncPlan> = {
 			Effect.gen(function* () {
 				const result = yield* syncHomeTimelineEffect({
 					account,
-					mode: !account || account === resolveDefaultSyncAccountId(runtime)
-						? "auto"
-						: "bird",
+					mode:
+						!account || account === resolveDefaultSyncAccountId(runtime)
+							? "auto"
+							: "bird",
 					limit: 100,
 					maxPages: 3,
 					following: true,
@@ -217,6 +218,7 @@ const WEB_SYNC_PLANS: Record<WebSyncKind, WebSyncPlan> = {
 				const inbox = options.inbox ?? "all";
 				const result = yield* syncDirectMessagesViaCachedBirdEffect({
 					account,
+					mode: "xurl",
 					inbox,
 					limit: options.limit ?? (inbox === "requests" ? 200 : 50),
 					...(options.maxPages !== undefined

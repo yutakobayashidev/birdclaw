@@ -16,10 +16,7 @@ import {
 	resolveUserPath,
 	type LaunchAgentInstallResult,
 } from "./launchd";
-import {
-	streamPeriodDigest,
-	type PeriodDigestPreset,
-} from "./period-digest";
+import { streamPeriodDigest, type PeriodDigestPreset } from "./period-digest";
 import {
 	acquireScheduledJobLock,
 	appendScheduledJobAudit,

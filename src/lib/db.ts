@@ -910,7 +910,7 @@ const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
 		},
 	},
 	{
-		version: 4,
+		version: 5,
 		name: "index cached tweet reply traversal",
 		up: (db) => {
 			db.exec(

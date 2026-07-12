@@ -6,6 +6,11 @@
 
 - Add a disabled-by-default, bearer-authenticated read-only MCP endpoint for account-scoped cached tweet search and thread research, with startup configuration/schema validation, strict loopback/Host/Origin/path isolation, bounded stateless requests, and no DM, live X, OpenAI, filesystem, or write tools.
 
+### Changed
+
+- Use `BIRDCLAW_OPENAI_BASE_URL` as the sole OpenAI-compatible endpoint setting; `OPENAI_BASE_URL` is ignored.
+- Default live DM reads and sends to `xurl` while the current `bird` CLI lacks DM support.
+
 ## 0.9.5 - 2026-07-06
 
 ### Fixed
@@ -34,7 +39,7 @@
 
 ### Added
 
-- Route inbox scoring and Responses API requests through `BIRDCLAW_OPENAI_BASE_URL`, retain `OPENAI_BASE_URL` as a compatibility fallback, and add opt-in OpenAI transport diagnostics. (#89 - thanks @martintrojer)
+- Route inbox scoring and Responses API requests through `BIRDCLAW_OPENAI_BASE_URL` and add opt-in OpenAI transport diagnostics. (#89 - thanks @martintrojer)
 
 ### Fixed
 

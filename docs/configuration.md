@@ -62,7 +62,7 @@ The Playwright test home is `.playwright-home` in the repo, which is why CI neve
 - `bird` — force `bird`
 - `xurl` — force `xurl`; verifies through `bird status` before mutating SQLite
 
-Tweet post/reply writes use `bird`. DM sends are not covered by `actions.transport`; pass `--transport xurl` to `compose dm` because the current `bird` CLI does not expose DM sends.
+Tweet post/reply writes use `bird`. DM sends are not covered by `actions.transport`; `compose dm` defaults to `xurl` because the current `bird` CLI does not expose DM sends.
 
 ### `mentions.dataSource`
 
@@ -115,7 +115,7 @@ There is no single global transport order:
 - Sync commands select their source with `--mode`; supported modes and defaults vary by command.
 - Mentions export resolves its data source separately.
 - Tweet compose writes use `bird`.
-- DM compose writes require explicit `--transport xurl` while bird lacks DM send support.
+- DM compose writes default to `xurl` while bird lacks DM send support.
 - Moderation writes use command `--transport`, then `BIRDCLAW_ACTIONS_TRANSPORT`, then `actions.transport`, then `auto`.
 
 For moderation, `auto` tries bird first and falls back to xurl. Persist that choice with `birdclaw auth use <auto|bird|xurl>`.

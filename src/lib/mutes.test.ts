@@ -50,12 +50,14 @@ function makeTempHome() {
 	resetBirdclawPathsForTests();
 	resetDatabaseForTests();
 	const db = getNativeDb();
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-primary", "acct_primary");
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-studio", "acct_studio");
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-primary",
+		"acct_primary",
+	);
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-studio",
+		"acct_studio",
+	);
 	return tempRoot;
 }
 
@@ -168,7 +170,10 @@ describe("mutes", () => {
 			output: "unmuted via bird; verified muting=false",
 			transport: "bird",
 		});
-		expect(mocks.unmuteUserViaBird).toHaveBeenCalledWith("7", "profile-primary");
+		expect(mocks.unmuteUserViaBird).toHaveBeenCalledWith(
+			"7",
+			"profile-primary",
+		);
 		expect(listMutes({ account: "acct_primary" })).toEqual([]);
 	});
 

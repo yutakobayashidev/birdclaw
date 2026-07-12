@@ -1780,14 +1780,14 @@ describe("cli", () => {
 		});
 		expect(syncDirectMessagesViaCachedBirdMock).toHaveBeenCalledWith({
 			account: "acct_primary",
-			mode: "bird",
+			mode: "xurl",
 			limit: 12,
 			refresh: true,
 			cacheTtlMs: 120_000,
 		});
 		expect(syncDirectMessagesViaCachedBirdMock).toHaveBeenCalledWith({
 			account: "acct_primary",
-			mode: "bird",
+			mode: "xurl",
 			limit: 7,
 			refresh: true,
 			cacheTtlMs: 45_000,
@@ -2966,7 +2966,7 @@ describe("cli", () => {
 			"Strong point",
 		);
 		expect(createDmReplyMock).toHaveBeenCalledWith("dm_1", "Looks good", {
-			transport: "bird",
+			transport: "xurl",
 		});
 		expect(scoreInboxMock).toHaveBeenCalledWith({ kind: "dms", limit: 3 });
 		expect(listInboxItemsMock).toHaveBeenCalledWith({

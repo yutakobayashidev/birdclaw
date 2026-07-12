@@ -14,7 +14,12 @@ const DEFAULT_REASONING_EFFORT = "medium";
 const DEFAULT_SERVICE_TIER = "priority";
 const DEFAULT_DELIMITER_PATTERN = /\n---\s*\n/;
 
-export type AnalysisReasoningEffort = "minimal" | "low" | "medium" | "high" | "none";
+export type AnalysisReasoningEffort =
+	| "minimal"
+	| "low"
+	| "medium"
+	| "high"
+	| "none";
 export type AnalysisServiceTier = "default" | "flex" | "priority";
 
 export interface AnalysisModelOptions {

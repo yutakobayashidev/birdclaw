@@ -52,12 +52,14 @@ function setupTempHome() {
 	resetBirdclawPathsForTests();
 	resetDatabaseForTests();
 	const db = getNativeDb();
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-primary", "acct_primary");
-	db.prepare(
-		"update accounts set bird_profile_name = ? where id = ?",
-	).run("profile-studio", "acct_studio");
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-primary",
+		"acct_primary",
+	);
+	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
+		"profile-studio",
+		"acct_studio",
+	);
 }
 
 afterEach(() => {
@@ -186,7 +188,10 @@ describe("blocklist", () => {
 			output: "unblocked via bird; verified blocking=false",
 			transport: "bird",
 		});
-		expect(mocks.unblockUserViaBird).toHaveBeenCalledWith("7", "profile-primary");
+		expect(mocks.unblockUserViaBird).toHaveBeenCalledWith(
+			"7",
+			"profile-primary",
+		);
 		expect(listBlocks({ account: "acct_primary" })).toHaveLength(0);
 	});
 
@@ -520,7 +525,10 @@ describe("blocklist", () => {
 
 		expect(mocks.lookupUsersByHandles).not.toHaveBeenCalled();
 		expect(mocks.lookupUsersByIds).not.toHaveBeenCalled();
-		expect(mocks.blockUserViaBird).toHaveBeenCalledWith("99", "profile-primary");
+		expect(mocks.blockUserViaBird).toHaveBeenCalledWith(
+			"99",
+			"profile-primary",
+		);
 	});
 
 	it("persists block rows in sqlite", async () => {

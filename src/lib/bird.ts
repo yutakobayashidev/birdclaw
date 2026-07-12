@@ -278,28 +278,25 @@ function isUnsupportedBirdOptionError(error: unknown, option: string) {
 	return text.includes(option) && /unknown option|error:/i.test(text);
 }
 
-export function runBirdJsonCommandEffect(
-	args: string[],
-	profileName: string,
-	timeoutMs?: number,
-) {
-	return Effect.gen(function* () {
-		const birdCommand = yield* Effect.try({
-			try: () => getBirdCommand(),
-			catch: (error) =>
-				error instanceof Error ? error : new Error(String(error)),
-		});
-		const result = yield* Effect.tryPromise({
-			try: () =>
-				execFileAsync(birdCommand, withBirdProfileName(args, profileName), {
-					maxBuffer: BIRD_JSON_MAX_BUFFER_BYTES,
-					timeout: timeoutMs,
-				}),
-			catch: (error) => formatBirdCommandError(error, birdCommand),
-		});
-		return (result as { stdout: string }).stdout;
-	});
-}
+export const runBirdJsonCommandEffect = Effect.fn("bird.runJsonCommand")(
+	(args: string[], profileName: string, timeoutMs?: number) =>
+		Effect.gen(function* () {
+			const birdCommand = yield* Effect.try({
+				try: () => getBirdCommand(),
+				catch: (error) =>
+					error instanceof Error ? error : new Error(String(error)),
+			});
+			const result = yield* Effect.tryPromise({
+				try: () =>
+					execFileAsync(birdCommand, withBirdProfileName(args, profileName), {
+						maxBuffer: BIRD_JSON_MAX_BUFFER_BYTES,
+						timeout: timeoutMs,
+					}),
+				catch: (error) => formatBirdCommandError(error, birdCommand),
+			});
+			return (result as { stdout: string }).stdout;
+		}),
+);
 
 function runBirdTweetJsonCommandEffect(
 	args: string[],
@@ -315,7 +312,11 @@ function runBirdTweetJsonCommandEffect(
 			if (!isUnsupportedBirdOptionError(error, "--json-full")) {
 				return Effect.fail(error);
 			}
-			return runBirdJsonCommandEffect([...args, "--json"], profileName, timeoutMs);
+			return runBirdJsonCommandEffect(
+				[...args, "--json"],
+				profileName,
+				timeoutMs,
+			);
 		}),
 	);
 }
@@ -628,22 +629,22 @@ function normalizeBirdTweetItemEffect(payload: unknown, command: string) {
 	});
 }
 
-export function listMentionsViaBirdEffect({
-	maxResults,
-	profileName,
-}: {
-	maxResults: number;
-	profileName: string;
-}): Effect.Effect<XurlMentionsResponse, unknown> {
-	return Effect.gen(function* () {
+export const listMentionsViaBirdEffect = Effect.fn("bird.listMentions")(
+	function* ({
+		maxResults,
+		profileName,
+	}: {
+		maxResults: number;
+		profileName: string;
+	}) {
 		const stdout = yield* runBirdTweetJsonCommandEffect(
 			["mentions", "-n", String(maxResults)],
 			profileName,
 		);
 		const payload = yield* parseBirdJsonEffect(stdout);
 		return yield* normalizeBirdTweetsPayloadEffect(payload, "mentions");
-	});
-}
+	},
+);
 
 export function listMentionsViaBird(options: {
 	maxResults: number;
@@ -652,7 +653,7 @@ export function listMentionsViaBird(options: {
 	return runEffectPromise(listMentionsViaBirdEffect(options));
 }
 
-function listTweetsViaBirdCommandEffect({
+const listTweetsViaBirdCommandEffect = Effect.fn("bird.listTweets")(function* ({
 	command,
 	maxResults,
 	all,
@@ -666,23 +667,21 @@ function listTweetsViaBirdCommandEffect({
 	maxPages?: number;
 	cursor?: string;
 	profileName: string;
-}): Effect.Effect<XurlMentionsResponse, unknown> {
-	return Effect.gen(function* () {
-		const args = [command, "-n", String(maxResults)];
-		if (all) {
-			args.push("--all");
-			if (maxPages !== undefined) {
-				args.push("--max-pages", String(maxPages));
-			}
+}) {
+	const args = [command, "-n", String(maxResults)];
+	if (all) {
+		args.push("--all");
+		if (maxPages !== undefined) {
+			args.push("--max-pages", String(maxPages));
 		}
-		if (cursor !== undefined) {
-			args.push("--cursor", cursor);
-		}
-		const stdout = yield* runBirdTweetJsonCommandEffect(args, profileName);
-		const payload = yield* parseBirdJsonEffect(stdout);
-		return yield* normalizeBirdTweetsPayloadEffect(payload, command);
-	});
-}
+	}
+	if (cursor !== undefined) {
+		args.push("--cursor", cursor);
+	}
+	const stdout = yield* runBirdTweetJsonCommandEffect(args, profileName);
+	const payload = yield* parseBirdJsonEffect(stdout);
+	return yield* normalizeBirdTweetsPayloadEffect(payload, command);
+});
 
 export function listLikedTweetsViaBirdEffect(options: {
 	maxResults: number;
@@ -730,21 +729,21 @@ export function listBookmarkedTweetsViaBird(options: {
 	return runEffectPromise(listBookmarkedTweetsViaBirdEffect(options));
 }
 
-export function listUserTweetsViaBirdEffect(
-	userHandle: string,
-	{
-		maxResults,
-		maxPages,
-		cursor,
-		profileName,
-	}: {
-		maxResults: number;
-		maxPages?: number;
-		cursor?: string;
-		profileName: string;
-	},
-): Effect.Effect<XurlUserTweetsResponse, unknown> {
-	return Effect.gen(function* () {
+export const listUserTweetsViaBirdEffect = Effect.fn("bird.listUserTweets")(
+	function* (
+		userHandle: string,
+		{
+			maxResults,
+			maxPages,
+			cursor,
+			profileName,
+		}: {
+			maxResults: number;
+			maxPages?: number;
+			cursor?: string;
+			profileName: string;
+		},
+	) {
 		const args = [
 			"user-tweets",
 			userHandle,
@@ -761,8 +760,8 @@ export function listUserTweetsViaBirdEffect(
 		const stdout = yield* runBirdJsonCommandEffect(args, profileName);
 		const payload = yield* parseBirdJsonEffect(stdout);
 		return yield* normalizeBirdUserTweetsPayloadEffect(payload);
-	});
-}
+	},
+);
 
 export function listUserTweetsViaBird(
 	userHandle: string,
@@ -776,16 +775,16 @@ export function listUserTweetsViaBird(
 	return runEffectPromise(listUserTweetsViaBirdEffect(userHandle, options));
 }
 
-export function searchTweetsViaBirdEffect(
-	query: string,
-	options: {
-		maxResults: number;
-		all?: boolean;
-		maxPages?: number;
-		profileName: string;
-	},
-): Effect.Effect<XurlMentionsResponse, unknown> {
-	return Effect.gen(function* () {
+export const searchTweetsViaBirdEffect = Effect.fn("bird.searchTweets")(
+	function* (
+		query: string,
+		options: {
+			maxResults: number;
+			all?: boolean;
+			maxPages?: number;
+			profileName: string;
+		},
+	) {
 		const args = ["search", query, "-n", String(options.maxResults)];
 		if (options.all) {
 			args.push("--all");
@@ -799,8 +798,8 @@ export function searchTweetsViaBirdEffect(
 		);
 		const payload = yield* parseBirdJsonEffect(stdout);
 		return yield* normalizeBirdTweetsPayloadEffect(payload, "search");
-	});
-}
+	},
+);
 
 export function searchTweetsViaBird(
 	query: string,
@@ -814,31 +813,27 @@ export function searchTweetsViaBird(
 	return runEffectPromise(searchTweetsViaBirdEffect(query, options));
 }
 
-export function lookupTweetsByIdsViaBirdEffect(
-	ids: string[],
-	profileName: string,
-): Effect.Effect<XurlTweetsResponse, unknown> {
+export const lookupTweetsByIdsViaBirdEffect = Effect.fn(
+	"bird.lookupTweetsByIds",
+)(function* (ids: string[], profileName: string) {
 	if (ids.length === 0) {
-		return Effect.succeed({ data: [] });
+		return { data: [] };
 	}
 
-	return Effect.gen(function* () {
-		const tweets = yield* Effect.forEach(
-			ids,
-			(id) =>
-				Effect.gen(function* () {
-					const stdout = yield* runBirdTweetJsonCommandEffect(
-						["read", id],
-						profileName,
-					);
-					const payload = yield* parseBirdJsonEffect(stdout);
-					return yield* normalizeBirdTweetItemEffect(payload, "read");
-				}),
-			{ concurrency: "unbounded" },
-		);
-		return normalizeBirdTweets(tweets);
-	});
-}
+	const tweets = yield* Effect.forEach(
+		ids,
+		Effect.fn("bird.readTweet")(function* (id: string) {
+			const stdout = yield* runBirdTweetJsonCommandEffect(
+				["read", id],
+				profileName,
+			);
+			const payload = yield* parseBirdJsonEffect(stdout);
+			return yield* normalizeBirdTweetItemEffect(payload, "read");
+		}),
+		{ concurrency: "unbounded" },
+	);
+	return normalizeBirdTweets(tweets);
+});
 
 export function lookupTweetsByIdsViaBird(
 	ids: string[],
@@ -847,22 +842,22 @@ export function lookupTweetsByIdsViaBird(
 	return runEffectPromise(lookupTweetsByIdsViaBirdEffect(ids, profileName));
 }
 
-export function listHomeTimelineViaBirdEffect({
-	maxResults,
-	following = true,
-	all,
-	maxPages,
-	cursor,
-	profileName,
-}: {
-	maxResults: number;
-	following?: boolean;
-	all?: boolean;
-	maxPages?: number;
-	cursor?: string;
-	profileName: string;
-}): Effect.Effect<XurlMentionsResponse, unknown> {
-	return Effect.gen(function* () {
+export const listHomeTimelineViaBirdEffect = Effect.fn("bird.listHomeTimeline")(
+	function* ({
+		maxResults,
+		following = true,
+		all,
+		maxPages,
+		cursor,
+		profileName,
+	}: {
+		maxResults: number;
+		following?: boolean;
+		all?: boolean;
+		maxPages?: number;
+		cursor?: string;
+		profileName: string;
+	}) {
 		const args = ["home", "-n", String(maxResults)];
 		if (all) {
 			args.push("--all");
@@ -879,8 +874,8 @@ export function listHomeTimelineViaBirdEffect({
 		const stdout = yield* runBirdTweetJsonCommandEffect(args, profileName);
 		const payload = yield* parseBirdJsonEffect(stdout);
 		return yield* normalizeBirdTweetsPayloadEffect(payload, "home");
-	});
-}
+	},
+);
 
 export function listHomeTimelineViaBird(options: {
 	maxResults: number;
@@ -938,22 +933,22 @@ function normalizeBirdFollowUsersEffect(
 	});
 }
 
-export function listFollowUsersViaBirdEffect({
-	direction,
-	userId,
-	maxResults,
-	all,
-	maxPages,
-	profileName,
-}: {
-	direction: "followers" | "following";
-	userId?: string;
-	maxResults: number;
-	all?: boolean;
-	maxPages?: number;
-	profileName: string;
-}): Effect.Effect<XurlFollowUsersResponse, unknown> {
-	return Effect.gen(function* () {
+export const listFollowUsersViaBirdEffect = Effect.fn("bird.listFollowUsers")(
+	function* ({
+		direction,
+		userId,
+		maxResults,
+		all,
+		maxPages,
+		profileName,
+	}: {
+		direction: "followers" | "following";
+		userId?: string;
+		maxResults: number;
+		all?: boolean;
+		maxPages?: number;
+		profileName: string;
+	}) {
 		const args = [direction, "-n", String(maxResults), "--json"];
 		if (userId) {
 			args.push("--user", userId);
@@ -971,8 +966,8 @@ export function listFollowUsersViaBirdEffect({
 			direction,
 			maxResults,
 		);
-	});
-}
+	},
+);
 
 export function listFollowUsersViaBird(options: {
 	direction: "followers" | "following";
@@ -1017,14 +1012,14 @@ function normalizeBirdLists(payload: unknown): XListPage {
 	return { data, meta: { result_count: data.length, next_token: null } };
 }
 
-export function listOwnedXListsViaBirdEffect({
-	maxResults,
-	profileName,
-}: {
-	maxResults: number;
-	profileName: string;
-}) {
-	return Effect.gen(function* () {
+export const listOwnedXListsViaBirdEffect = Effect.fn("bird.listOwnedXLists")(
+	function* ({
+		maxResults,
+		profileName,
+	}: {
+		maxResults: number;
+		profileName: string;
+	}) {
 		const stdout = yield* runBirdJsonCommandEffect(
 			["lists", "-n", String(maxResults), "--json"],
 			profileName,
@@ -1034,8 +1029,8 @@ export function listOwnedXListsViaBirdEffect({
 			try: () => normalizeBirdLists(payload),
 			catch: (error) => error,
 		});
-	});
-}
+	},
+);
 
 export function listOwnedXListsViaBird(options: {
 	maxResults: number;
@@ -1044,18 +1039,18 @@ export function listOwnedXListsViaBird(options: {
 	return runEffectPromise(listOwnedXListsViaBirdEffect(options));
 }
 
-export function listXListMembersViaBirdEffect({
-	listId,
-	maxResults,
-	maxPages = 1,
-	profileName,
-}: {
-	listId: string;
-	maxResults: number;
-	maxPages?: number;
-	profileName: string;
-}) {
-	return Effect.gen(function* () {
+export const listXListMembersViaBirdEffect = Effect.fn("bird.listXListMembers")(
+	function* ({
+		listId,
+		maxResults,
+		maxPages = 1,
+		profileName,
+	}: {
+		listId: string;
+		maxResults: number;
+		maxPages?: number;
+		profileName: string;
+	}) {
 		const args = ["list-members", listId, "-n", String(maxResults), "--json"];
 		if (maxPages > 1) {
 			args.push("--all", "--max-pages", String(maxPages));
@@ -1075,8 +1070,8 @@ export function listXListMembersViaBirdEffect({
 			};
 		}
 		return normalized;
-	});
-}
+	},
+);
 
 export function listXListMembersViaBird(options: {
 	listId: string;
@@ -1087,7 +1082,7 @@ export function listXListMembersViaBird(options: {
 	return runEffectPromise(listXListMembersViaBirdEffect(options));
 }
 
-export function listThreadViaBirdEffect({
+export const listThreadViaBirdEffect = Effect.fn("bird.listThread")(function* ({
 	tweetId,
 	all,
 	maxPages,
@@ -1099,24 +1094,22 @@ export function listThreadViaBirdEffect({
 	maxPages?: number;
 	timeoutMs?: number;
 	profileName: string;
-}): Effect.Effect<XurlMentionsResponse, unknown> {
-	return Effect.gen(function* () {
-		const args = ["thread", tweetId];
-		if (all) {
-			args.push("--all");
-		}
-		if (maxPages !== undefined) {
-			args.push("--max-pages", String(maxPages));
-		}
-		const stdout = yield* runBirdTweetJsonCommandEffect(
-			args,
-			profileName,
-			timeoutMs,
-		);
-		const payload = yield* parseBirdJsonEffect(stdout);
-		return yield* normalizeBirdTweetsPayloadEffect(payload, "thread");
-	});
-}
+}) {
+	const args = ["thread", tweetId];
+	if (all) {
+		args.push("--all");
+	}
+	if (maxPages !== undefined) {
+		args.push("--max-pages", String(maxPages));
+	}
+	const stdout = yield* runBirdTweetJsonCommandEffect(
+		args,
+		profileName,
+		timeoutMs,
+	);
+	const payload = yield* parseBirdJsonEffect(stdout);
+	return yield* normalizeBirdTweetsPayloadEffect(payload, "thread");
+});
 
 export function listThreadViaBird(options: {
 	tweetId: string;
@@ -1157,17 +1150,15 @@ function parseBirdWhoami(stdout: string): BirdAuthenticatedAccount {
 	};
 }
 
-export function getAuthenticatedBirdAccountEffect(
-	profileName: string,
-): Effect.Effect<BirdAuthenticatedAccount, unknown> {
-	return Effect.gen(function* () {
-		const stdout = yield* runBirdJsonCommandEffect(["whoami"], profileName);
-		return yield* Effect.try({
-			try: () => parseBirdWhoami(stdout),
-			catch: (error) => error,
-		});
+export const getAuthenticatedBirdAccountEffect = Effect.fn(
+	"bird.getAuthenticatedAccount",
+)(function* (profileName: string) {
+	const stdout = yield* runBirdJsonCommandEffect(["whoami"], profileName);
+	return yield* Effect.try({
+		try: () => parseBirdWhoami(stdout),
+		catch: (error) => error,
 	});
-}
+});
 
 export function getAuthenticatedBirdAccount(
 	profileName: string,
@@ -1234,7 +1225,9 @@ export function replyToTweetViaBird(
 	);
 }
 
-export function listDirectMessagesViaBirdEffect({
+export const listDirectMessagesViaBirdEffect = Effect.fn(
+	"bird.listDirectMessages",
+)(function* ({
 	maxResults: _maxResults,
 	inbox: _inbox = "all",
 	maxPages: _maxPages,
@@ -1246,9 +1239,11 @@ export function listDirectMessagesViaBirdEffect({
 	maxPages?: number;
 	allPages?: boolean;
 	pageDelayMs?: number;
-}): Effect.Effect<BirdDmsResponse, unknown> {
-	return Effect.fail(new Error("bird CLI does not support direct messages"));
-}
+}) {
+	return yield* Effect.fail(
+		new Error("bird CLI does not support direct messages"),
+	);
+});
 
 export function listDirectMessagesViaBird(options: {
 	maxResults: number;
@@ -1260,7 +1255,9 @@ export function listDirectMessagesViaBird(options: {
 	return runEffectPromise(listDirectMessagesViaBirdEffect(options));
 }
 
-export function runDirectMessageRequestMutationViaBirdEffect({
+export const runDirectMessageRequestMutationViaBirdEffect = Effect.fn(
+	"bird.runDirectMessageRequestMutation",
+)(function* ({
 	action: _action,
 	conversationId: _conversationId,
 	maxPages: _maxPages,
@@ -1270,11 +1267,11 @@ export function runDirectMessageRequestMutationViaBirdEffect({
 	conversationId: string;
 	maxPages?: number;
 	allPages?: boolean;
-}): Effect.Effect<BirdDmMutationResponse, unknown> {
-	return Effect.fail(
+}) {
+	return yield* Effect.fail(
 		new Error("bird CLI does not support direct message mutations"),
 	);
-}
+});
 
 export function runDirectMessageRequestMutationViaBird(options: {
 	action: BirdDmRequestAction;
@@ -1287,11 +1284,8 @@ export function runDirectMessageRequestMutationViaBird(options: {
 	);
 }
 
-export function lookupProfileViaBirdEffect(
-	usernameOrId: string,
-	profileName: string,
-): Effect.Effect<XurlMentionUser | null, unknown> {
-	return Effect.gen(function* () {
+export const lookupProfileViaBirdEffect = Effect.fn("bird.lookupProfile")(
+	function* (usernameOrId: string, profileName: string) {
 		const target = usernameOrId.trim().replace(/^@/, "");
 		if (!target) {
 			return null;
@@ -1305,8 +1299,8 @@ export function lookupProfileViaBirdEffect(
 			stdout,
 		)) as BirdUserOverviewPayload;
 		return toXurlMentionUser(payload.user);
-	});
-}
+	},
+);
 
 export function lookupProfileViaBird(
 	usernameOrId: string,
@@ -1359,13 +1353,13 @@ function toXurlMentionUser(
 	};
 }
 
-export function lookupProfilesViaBirdEffect(
+export const lookupProfilesViaBirdEffect = Effect.fn("bird.lookupProfiles")((
 	usernameOrIds: string[],
 	profileName: string,
 ): Effect.Effect<
 	Array<{ target: string; user: XurlMentionUser | null; error?: string }>,
 	unknown
-> {
+> => {
 	const targets = Array.from(
 		new Set(
 			usernameOrIds
@@ -1412,7 +1406,7 @@ export function lookupProfilesViaBirdEffect(
 			}),
 		),
 	);
-}
+});
 
 export function lookupProfilesViaBird(
 	usernameOrIds: string[],

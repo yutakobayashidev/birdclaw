@@ -30,7 +30,7 @@ Install the LaunchAgent:
 birdclaw --json jobs install-account-launchd --account acct_openclaw --program /opt/homebrew/bin/birdclaw --env-path ~/.config/bird/openclaw.env
 ```
 
-The default interval is 1,800 seconds (30 minutes). Use `--steps timeline,mentions,dms` for a narrower job. `--env-path ~/.config/bird/openclaw.env` still works for process environment variables, but bird account selection comes from the account's stored relay profile name. Accounts without `bird_profile_name` cannot use bird-backed steps. `--allow-bird-account` is deprecated and no longer authorizes bird use by itself. DM steps require explicit xurl mode while bird lacks DM support.
+The default interval is 1,800 seconds (30 minutes). Use `--steps timeline,mentions,dms` for a narrower job. `--env-path ~/.config/bird/openclaw.env` still works for process environment variables, but bird account selection comes from the account's stored relay profile name. Accounts without `bird_profile_name` cannot use bird-backed steps. `--allow-bird-account` is deprecated and no longer authorizes bird use by itself. In `auto` mode, DM steps use xurl while bird lacks DM support.
 
 ## `jobs sync-bookmarks`
 

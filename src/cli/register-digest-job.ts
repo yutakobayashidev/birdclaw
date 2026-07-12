@@ -1,7 +1,4 @@
-import {
-	installDigestLaunchAgent,
-	runDigestJob,
-} from "#/lib/digest-job";
+import { installDigestLaunchAgent, runDigestJob } from "#/lib/digest-job";
 import type { CliCommandContext } from "./command-context";
 
 export function registerDigestJobCommands({ print }: CliCommandContext) {
@@ -20,10 +17,7 @@ export function registerDigestJobCommands({ print }: CliCommandContext) {
 				)
 				.option("--include-dms", "Include private DM context")
 				.option("--model <model>", "OpenAI model id")
-				.option(
-					"--language <tag>",
-					"Report language as a Unicode locale id",
-				)
+				.option("--language <tag>", "Report language as a Unicode locale id")
 				.option("--max-tweets <n>", "Maximum tweet context")
 				.option("--max-links <n>", "Maximum linked articles")
 				.option("--log <path>", "Audit JSONL path")
@@ -35,8 +29,14 @@ export function registerDigestJobCommands({ print }: CliCommandContext) {
 						includeDms: Boolean(options.includeDms),
 						model: options.model,
 						language: options.language,
-						maxTweets: options.maxTweets !== undefined ? Number(options.maxTweets) : undefined,
-						maxLinks: options.maxLinks !== undefined ? Number(options.maxLinks) : undefined,
+						maxTweets:
+							options.maxTweets !== undefined
+								? Number(options.maxTweets)
+								: undefined,
+						maxLinks:
+							options.maxLinks !== undefined
+								? Number(options.maxLinks)
+								: undefined,
 						logPath: options.log,
 					});
 					print(result, true);
@@ -48,16 +48,17 @@ export function registerDigestJobCommands({ print }: CliCommandContext) {
 				.description("Install a LaunchAgent that runs digest every hour")
 				.option("--label <label>", "LaunchAgent label")
 				.option("--interval-seconds <seconds>", "Launch interval", "3600")
-				.option("--program <path>", "birdclaw executable or command", "birdclaw")
+				.option(
+					"--program <path>",
+					"birdclaw executable or command",
+					"birdclaw",
+				)
 				.option("--account <accountId>", "Account id")
 				.option("--window-hours <hours>", "Hours to look back", "6")
 				.option("--period <period>", "Period preset")
 				.option("--include-dms", "Include private DM context")
 				.option("--model <model>", "OpenAI model id")
-				.option(
-					"--language <tag>",
-					"Report language as a Unicode locale id",
-				)
+				.option("--language <tag>", "Report language as a Unicode locale id")
 				.option("--max-tweets <n>", "Maximum tweet context")
 				.option("--max-links <n>", "Maximum linked articles")
 				.option("--log <path>", "Audit JSONL path")
@@ -78,8 +79,14 @@ export function registerDigestJobCommands({ print }: CliCommandContext) {
 						includeDms: Boolean(options.includeDms),
 						model: options.model,
 						language: options.language,
-						maxTweets: options.maxTweets !== undefined ? Number(options.maxTweets) : undefined,
-						maxLinks: options.maxLinks !== undefined ? Number(options.maxLinks) : undefined,
+						maxTweets:
+							options.maxTweets !== undefined
+								? Number(options.maxTweets)
+								: undefined,
+						maxLinks:
+							options.maxLinks !== undefined
+								? Number(options.maxLinks)
+								: undefined,
 						logPath: options.log,
 						envFile: options.envPath ?? options.envFile,
 						stdoutPath: options.stdout,

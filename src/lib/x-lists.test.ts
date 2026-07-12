@@ -87,8 +87,8 @@ function setupAccount() {
 		.get() as {
 		id: string;
 		handle: string;
-			external_user_id: string | null;
-		};
+		external_user_id: string | null;
+	};
 	db.prepare("update accounts set bird_profile_name = ? where id = ?").run(
 		"test-profile",
 		account.id,

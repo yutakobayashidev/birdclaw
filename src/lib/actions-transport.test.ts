@@ -161,10 +161,7 @@ describe("actions transport", () => {
 			output: "bird block ok",
 			transport: "bird",
 		});
-		expect(mocks.blockUserViaBird).toHaveBeenCalledWith(
-			"7",
-			"profile-primary",
-		);
+		expect(mocks.blockUserViaBird).toHaveBeenCalledWith("7", "profile-primary");
 	});
 
 	it("uses bird in auto mode first", async () => {
@@ -184,10 +181,7 @@ describe("actions transport", () => {
 			output: "bird block ok",
 			transport: "bird",
 		});
-		expect(mocks.blockUserViaBird).toHaveBeenCalledWith(
-			"7",
-			"profile-primary",
-		);
+		expect(mocks.blockUserViaBird).toHaveBeenCalledWith("7", "profile-primary");
 		expect(mocks.blockUserViaXurl).not.toHaveBeenCalled();
 	});
 
@@ -213,10 +207,7 @@ describe("actions transport", () => {
 			output: "bird block ok",
 			transport: "bird",
 		});
-		expect(mocks.blockUserViaBird).toHaveBeenCalledWith(
-			"7",
-			"profile-primary",
-		);
+		expect(mocks.blockUserViaBird).toHaveBeenCalledWith("7", "profile-primary");
 		expect(mocks.lookupAuthenticatedUser).not.toHaveBeenCalled();
 		expect(mocks.blockUserViaXurl).not.toHaveBeenCalled();
 	});

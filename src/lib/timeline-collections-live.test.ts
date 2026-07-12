@@ -121,17 +121,19 @@ function setupTempHome() {
 		"profile-studio",
 		"acct_studio",
 	);
-	mocks.getAuthenticatedBirdAccount.mockImplementation((profileName: string) => {
-		if (profileName === "profile-studio") {
+	mocks.getAuthenticatedBirdAccount.mockImplementation(
+		(profileName: string) => {
+			if (profileName === "profile-studio") {
+				return Promise.resolve({
+					username: "birdclaw_lab",
+				});
+			}
 			return Promise.resolve({
-				username: "birdclaw_lab",
+				id: "25401953",
+				username: "steipete",
 			});
-		}
-		return Promise.resolve({
-			id: "25401953",
-			username: "steipete",
-		});
-	});
+		},
+	);
 }
 
 afterEach(() => {

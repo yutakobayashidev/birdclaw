@@ -331,7 +331,18 @@ function useDigestStream(period: PeriodOption, includeDms: boolean) {
 		};
 	}, [queryClient, result]);
 
-	return { context, error, loading, markdown, reasoning, reasoningOpen, setReasoningOpen, result, run, status };
+	return {
+		context,
+		error,
+		loading,
+		markdown,
+		reasoning,
+		reasoningOpen,
+		setReasoningOpen,
+		result,
+		run,
+		status,
+	};
 }
 
 function TodayRoute() {
@@ -359,8 +370,18 @@ export function TodayRouteView({
 	const updateSearch: RouteSearchChange<TodayRouteSearch> = (next, options) =>
 		onSearchChange ? onSearchChange(next, options) : setLocalSearch(next);
 	const { period, includeDms } = searchState;
-	const { context, error, loading, markdown, reasoning, reasoningOpen, setReasoningOpen, result, run, status } =
-		useDigestStream(period, includeDms);
+	const {
+		context,
+		error,
+		loading,
+		markdown,
+		reasoning,
+		reasoningOpen,
+		setReasoningOpen,
+		result,
+		run,
+		status,
+	} = useDigestStream(period, includeDms);
 	useEffect(() => {
 		const root = document.documentElement;
 		root.classList.add("today-pdf-route");
@@ -511,29 +532,40 @@ export function TodayRouteView({
 				/>
 			) : (
 				<div className="px-4 py-5 text-[14px] text-[var(--ink-soft)]">
-					{loading
-						? reasoning
-							? (
-								<div>
-									<button
-										type="button"
-										className="mb-2 inline-flex items-center gap-1 text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]"
-										onClick={() => setReasoningOpen((o) => !o)}
+					{loading ? (
+						reasoning ? (
+							<div>
+								<button
+									type="button"
+									className="mb-2 inline-flex items-center gap-1 text-[13px] text-[var(--ink-soft)] hover:text-[var(--ink)]"
+									onClick={() => setReasoningOpen((o) => !o)}
+								>
+									<span
+										className={cx(
+											"text-[10px] transition-transform",
+											reasoningOpen && "rotate-90",
+										)}
 									>
-										<span className={cx("text-[10px] transition-transform", reasoningOpen && "rotate-90")}>▶</span>
-										{reasoningOpen ? "Hide reasoning" : "Show reasoning"}
-									</button>
-									{reasoningOpen ? (
-										<div className="max-w-prose whitespace-pre-wrap opacity-60 text-[13px]">{reasoning}</div>
-									) : (
-										<div className="text-[13px]">{status}</div>
-									)}
-								</div>
-							)
-							: status
-						: error
-							? "No digest was generated. Retry to start a new run."
-							: "Waiting for the first tokens..."}
+										▶
+									</span>
+									{reasoningOpen ? "Hide reasoning" : "Show reasoning"}
+								</button>
+								{reasoningOpen ? (
+									<div className="max-w-prose whitespace-pre-wrap opacity-60 text-[13px]">
+										{reasoning}
+									</div>
+								) : (
+									<div className="text-[13px]">{status}</div>
+								)}
+							</div>
+						) : (
+							status
+						)
+					) : error ? (
+						"No digest was generated. Retry to start a new run."
+					) : (
+						"Waiting for the first tokens..."
+					)}
 				</div>
 			)}
 		</div>
