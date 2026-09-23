@@ -4,12 +4,12 @@
   fetchPnpmDeps,
   pnpmConfigHook,
   pnpm_10,
-  nodejs-slim_latest,
+  nodejs-slim_26,
   src,
 }:
 
 let
-  pnpm' = pnpm_10.override { nodejs-slim = nodejs-slim_latest; };
+  pnpm' = pnpm_10.override { nodejs-slim = nodejs-slim_26; };
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "birdclaw";
@@ -25,13 +25,13 @@ stdenv.mkDerivation (finalAttrs: {
   };
 
   nativeBuildInputs = [
-    nodejs-slim_latest
+    nodejs-slim_26
     pnpmConfigHook
     pnpm'
   ];
 
   buildInputs = [
-    nodejs-slim_latest
+    nodejs-slim_26
   ];
 
   buildPhase = ''
